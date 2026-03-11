@@ -1,0 +1,35 @@
+name            = "mxhook-worker"
+main            = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# Queue consumer
+# ---------------------------------------------------------------------------
+[[queues.consumers]]
+  queue        = "mxhook-email-events"
+  max_batch_size    = 10
+  max_batch_timeout = 5   # seconds
+  max_retries       = 3
+  dead_letter_queue = "mxhook-email-events-dlq"
+
+# ---------------------------------------------------------------------------
+# D1 database
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+  binding      = "DB"
+  database_name = "mxhook"
+  database_id  = "REPLACE_WITH_D1_DATABASE_ID"
+
+# ---------------------------------------------------------------------------
+# R2 bucket
+# ---------------------------------------------------------------------------
+[[r2_buckets]]
+  binding     = "EMAIL_STORE"
+  bucket_name = "mxhook-emails"
+
+# ---------------------------------------------------------------------------
+# Environment variables (non-secret)
+# ---------------------------------------------------------------------------
+[vars]
+  LOG_LEVEL = "info"
