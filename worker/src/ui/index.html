@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MXHook Dashboard</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=ibm-plex-mono:400,500|ibm-plex-sans:400,500,600" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #0d0f14;
+      --surface:  #161921;
+      --border:   #252830;
+      --accent:   #00e5a0;
+      --accent2:  #0091ff;
+      --text:     #e8eaf0;
+      --muted:    #6b7280;
+      --danger:   #ff4d4d;
+      --warn:     #f59e0b;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --radius:   6px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .logo {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--text); }
+    nav { display: flex; gap: 4px; }
+    nav button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font: 500 13px var(--font-sans);
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    nav button:hover { color: var(--text); background: var(--border); }
+    nav button.active { color: var(--accent); background: rgba(0,229,160,0.08); }
+    main { padding: 32px; max-width: 1100px; margin: 0 auto; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    h2 { font-size: 20px; font-weight: 600; margin-bottom: 20px; color: var(--text); }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      padding: 0 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: var(--font-mono);
+    }
+    .badge-ok      { background: rgba(0,229,160,0.12); color: var(--accent); }
+    .badge-warn    { background: rgba(245,158,11,0.12); color: var(--warn); }
+    .badge-err     { background: rgba(255,77,77,0.12);  color: var(--danger); }
+    .badge-neutral { background: var(--border); color: var(--muted); }
+    .usage-bar {
+      background: var(--border);
+      border-radius: 3px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .usage-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+    .usage-fill.warn { background: var(--warn); }
+    .usage-fill.over { background: var(--danger); }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+    }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      margin-top: 4px;
+      color: var(--accent);
+    }
+    .filters { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .filters input, .filters select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font: 13px var(--font-mono);
+      padding: 7px 12px;
+      outline: none;
+    }
+    .filters input:focus, .filters select:focus { border-color: var(--accent); }
+    .btn {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius);
+      padding: 7px 16px;
+      font: 500 13px var(--font-sans);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 40px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    .plan-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      background: rgba(0,145,255,0.12);
+      color: var(--accent2);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: none; }
+    }
+    .tab.active { animation: fadeIn 0.2s ease; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">mx<span>hook</span></div>
+    <nav>
+      <button class="active" onclick="showTab('messages', this)">Messages</button>
+      <button onclick="showTab('domains', this)">Domains</button>
+      <button onclick="showTab('billing', this)">Billing</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Messages Tab -->
+    <div id="tab-messages" class="tab active">
+      <h2>Message Logs</h2>
+      <div class="filters">
+        <input id="f-domain" placeholder="Filter by domain" />
+        <select id="f-status">
+          <option value="">All statuses</option>
+          <option value="delivered">Delivered</option>
+          <option value="failed">Failed</option>
+          <option value="queued">Queued</option>
+        </select>
+        <input id="f-since" type="date" />
+        <button class="btn" onclick="loadMessages(null)">Apply</button>
+      </div>
+      <div class="card" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>From</th><th>Subject</th>
+              <th>Domain</th><th>Status</th><th>Received</th>
+            </tr>
+          </thead>
+          <tbody id="messages-body"></tbody>
+        </table>
+      </div>
+      <div id="messages-pagination" style="margin-top:12px;display:flex;gap:8px;"></div>
+    </div>
+
+    <!-- Domains Tab -->
+    <div id="tab-domains" class="tab">
+      <h2>Domains</h2>
+      <div class="card" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Domain</th><th>Verified</th><th>SPF</th>
+              <th>DKIM</th><th>Routes</th><th>Added</th>
+            </tr>
+          </thead>
+          <tbody id="domains-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Billing Tab -->
+    <div id="tab-billing" class="tab">
+      <h2>Billing &amp; Usage</h2>
+      <div id="billing-content"></div>
+    </div>
+  </main>
+
+  <script>
+    // Escape text for safe DOM text nodes
+    function esc(s) { return String(s ?? ''); }
+
+    function txt(s) {
+      const el = document.createTextNode(esc(s));
+      return el;
+    }
+
+    function el(tag, cls, children) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      (children || []).forEach(c => {
+        if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+        else if (c) e.appendChild(c);
+      });
+      return e;
+    }
+
+    function badge(label, type) {
+      return el('span', 'badge badge-' + type, [label]);
+    }
+
+    function fmtDate(s) {
+      if (!s) return '—';
+      return new Date(s).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    async function apiFetch(path) {
+      const res = await fetch('/api/v1' + path);
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+
+    function setEmpty(tbody, cols, msg) {
+      tbody.replaceChildren();
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = cols;
+      td.className = 'empty';
+      td.textContent = msg;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    function showTab(name, btn) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      btn.classList.add('active');
+      if (name === 'messages') loadMessages(null);
+      if (name === 'domains')  loadDomains();
+      if (name === 'billing')  loadBilling();
+    }
+
+    async function loadMessages(cursor) {
+      const tbody = document.getElementById('messages-body');
+      setEmpty(tbody, 6, 'Loading...');
+
+      const domain = document.getElementById('f-domain').value;
+      const status = document.getElementById('f-status').value;
+      const since  = document.getElementById('f-since').value;
+      const params = new URLSearchParams({ limit: '50' });
+      if (domain) params.set('domain', domain);
+      if (status) params.set('status', status);
+      if (since)  params.set('since', since);
+      if (cursor) params.set('cursor', cursor);
+
+      try {
+        const data = await apiFetch('/messages?' + params);
+        tbody.replaceChildren();
+        if (!data.items || !data.items.length) {
+          setEmpty(tbody, 6, 'No messages');
+          return;
+        }
+        data.items.forEach(m => {
+          const statusMap = { delivered: 'ok', failed: 'err', queued: 'warn' };
+          const tr = document.createElement('tr');
+          const idStr = String(m.id ?? '').slice(0, 12) + '...';
+          [
+            el('td', null, [el('span', null, [idStr])]),
+            el('td', null, [esc(m.from_addr)]),
+            el('td', null, [esc(m.subject ?? '(no subject)')]),
+            el('td', null, [esc(m.domain)]),
+            el('td', null, [badge(m.status, statusMap[m.status] ?? 'neutral')]),
+            el('td', null, [fmtDate(m.received_at)]),
+          ].forEach(td => tr.appendChild(td));
+          tbody.appendChild(tr);
+        });
+
+        const pag = document.getElementById('messages-pagination');
+        pag.replaceChildren();
+        if (data.next_cursor) {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.textContent = 'Load more';
+          const nc = data.next_cursor;
+          btn.addEventListener('click', () => loadMessages(nc));
+          pag.appendChild(btn);
+        }
+      } catch (e) {
+        setEmpty(tbody, 6, e.message || 'Error loading messages');
+      }
+    }
+
+    async function loadDomains() {
+      const tbody = document.getElementById('domains-body');
+      setEmpty(tbody, 6, 'Loading...');
+      try {
+        const data = await apiFetch('/domains');
+        tbody.replaceChildren();
+        if (!data.domains || !data.domains.length) {
+          setEmpty(tbody, 6, 'No domains configured');
+          return;
+        }
+        data.domains.forEach(d => {
+          const tr = document.createElement('tr');
+          [
+            el('td', null, [esc(d.name)]),
+            el('td', null, [badge(d.verified ? 'verified' : 'pending', d.verified ? 'ok' : 'warn')]),
+            el('td', null, [badge(d.spf_ok ? 'ok' : 'fail',  d.spf_ok ? 'ok' : 'err')]),
+            el('td', null, [badge(d.dkim_ok ? 'ok' : 'fail', d.dkim_ok ? 'ok' : 'err')]),
+            el('td', null, [String(d.route_count ?? 0)]),
+            el('td', null, [fmtDate(d.created_at)]),
+          ].forEach(td => tr.appendChild(td));
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        setEmpty(tbody, 6, e.message || 'Error loading domains');
+      }
+    }
+
+    async function loadBilling() {
+      const container = document.getElementById('billing-content');
+      container.replaceChildren();
+      const loading = document.createElement('p');
+      loading.className = 'empty';
+      loading.textContent = 'Loading...';
+      container.appendChild(loading);
+
+      try {
+        const d = await apiFetch('/billing/usage');
+        container.replaceChildren();
+
+        const card = el('div', 'card');
+
+        // Plan row
+        const planRow = el('div', null);
+        planRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;';
+        const planLabel = el('div', null);
+        const planCaption = document.createElement('div');
+        planCaption.style.cssText = 'color:var(--muted);font-size:12px;margin-bottom:4px;';
+        planCaption.textContent = 'Current Plan';
+        const planBadge = el('span', 'plan-badge', [esc(d.plan)]);
+        planLabel.appendChild(planCaption);
+        planLabel.appendChild(planBadge);
+        planRow.appendChild(planLabel);
+        card.appendChild(planRow);
+
+        // Stats grid
+        const grid = el('div', 'stat-grid');
+        const stats = [
+          { label: 'Messages', usage: d.usage.messages },
+          { label: 'Domains',  usage: d.usage.domains  },
+        ];
+        stats.forEach(s => {
+          const pct = s.usage.limit > 0
+            ? Math.min(Math.round((s.usage.used / s.usage.limit) * 100), 100)
+            : 0;
+          const fillCls = pct >= 100 ? 'usage-fill over' : pct >= 80 ? 'usage-fill warn' : 'usage-fill';
+          const statEl = el('div', 'stat');
+          const lbl = document.createElement('div');
+          lbl.className = 'stat-label';
+          lbl.textContent = s.label;
+          const val = document.createElement('div');
+          val.className = 'stat-value';
+          val.textContent = s.usage.used.toLocaleString();
+          const sub = document.createElement('div');
+          sub.style.cssText = 'color:var(--muted);font-size:12px;margin-top:4px;';
+          sub.textContent = 'of ' + (s.usage.limit < 0 ? 'unlimited' : s.usage.limit.toLocaleString());
+          statEl.appendChild(lbl);
+          statEl.appendChild(val);
+          statEl.appendChild(sub);
+          if (s.usage.limit > 0) {
+            const bar = el('div', 'usage-bar');
+            const fill = el('div', fillCls);
+            fill.style.width = pct + '%';
+            bar.appendChild(fill);
+            statEl.appendChild(bar);
+          }
+          grid.appendChild(statEl);
+        });
+        card.appendChild(grid);
+        container.appendChild(card);
+      } catch (e) {
+        container.replaceChildren();
+        const p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = e.message || 'Error loading billing';
+        container.appendChild(p);
+      }
+    }
+
+    // Initial load
+    loadMessages(null);
+  </script>
+</body>
+</html>

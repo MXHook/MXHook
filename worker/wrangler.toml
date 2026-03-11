@@ -1,0 +1,24 @@
+name = "mxhook-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding  = "DB"
+database_name = "mxhook"
+database_id   = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding     = "BUCKET"
+bucket_name = "mxhook-emails"
+
+[[queues.consumers]]
+queue   = "mxhook-email-queue"
+binding = "EMAIL_QUEUE"
+
+[vars]
+# Non-secret env vars here. Secrets via `wrangler secret put`.
+
+# Required secrets (set with `wrangler secret put <NAME>`):
+#   SESSION_SECRET  — HMAC key for session tokens
+#   ADMIN_API_KEY   — admin panel access key
