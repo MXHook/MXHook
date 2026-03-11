@@ -31,10 +31,21 @@ type Deliverer struct {
 
 // NewDeliverer creates a Deliverer.
 func NewDeliverer(cfg Config) *Deliverer {
+	if cfg.TimeoutSecs <= 0 {
+		cfg.TimeoutSecs = 30
+	}
+	if cfg.MaxAttempts <= 0 {
+		cfg.MaxAttempts = 3
+	}
 	return &Deliverer{
 		cfg:    cfg,
 		client: &http.Client{Timeout: time.Duration(cfg.TimeoutSecs) * time.Second},
 	}
+}
+
+// Timeout returns the configured HTTP timeout.
+func (d *Deliverer) Timeout() time.Duration {
+	return time.Duration(d.cfg.TimeoutSecs) * time.Second
 }
 
 // Deliver sends event to endpoint with HMAC signing and exponential backoff retry.
