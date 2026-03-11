@@ -1,0 +1,16 @@
+run:
+  timeout: 5m
+linters:
+  enable:
+    - bodyclose
+    - goconst
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - wrapcheck
+formatters:
+  enable:
+    - gofumpt
+    - goimports
