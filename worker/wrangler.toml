@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 # Queue consumer
 # ---------------------------------------------------------------------------
 [[queues.consumers]]
-  queue        = "mxhook-email-events"
+  queue             = "mxhook-email-events"
   max_batch_size    = 10
   max_batch_timeout = 5   # seconds
   max_retries       = 3
@@ -17,9 +17,9 @@ compatibility_flags = ["nodejs_compat"]
 # D1 database
 # ---------------------------------------------------------------------------
 [[d1_databases]]
-  binding      = "DB"
+  binding       = "DB"
   database_name = "mxhook"
-  database_id  = "REPLACE_WITH_D1_DATABASE_ID"
+  database_id   = "REPLACE_WITH_D1_DATABASE_ID"
 
 # ---------------------------------------------------------------------------
 # R2 bucket
@@ -33,3 +33,13 @@ compatibility_flags = ["nodejs_compat"]
 # ---------------------------------------------------------------------------
 [vars]
   LOG_LEVEL = "info"
+
+# Required secrets (set with `wrangler secret put <NAME>`):
+#   SESSION_SECRET  — HMAC key for session tokens
+#   ADMIN_API_KEY   — admin panel access key
+
+# ---------------------------------------------------------------------------
+# Cron triggers (domain verification)
+# ---------------------------------------------------------------------------
+[triggers]
+  crons = ["0 * * * *"]  # every hour — verify pending domains
