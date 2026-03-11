@@ -1,11 +1,15 @@
 package api
 
 import (
+	_ "embed"
 	"encoding/json"
 	"net/http"
 
 	"github.com/mxhook/mxhook/webhook"
 )
+
+//go:embed openapi.yaml
+var openapiSpec []byte
 
 // Config holds API server configuration.
 type Config struct {
@@ -52,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+	s.mux.HandleFunc("GET /openapi.yaml", s.handleOpenAPISpec)
 	s.mux.HandleFunc("GET /dlq", s.requireAPIKey(s.handleListDLQ))
 	s.mux.HandleFunc("DELETE /dlq/{id}", s.requireAPIKey(s.handleDeleteDLQ))
 	s.mux.HandleFunc("POST /domains", s.requireAPIKey(s.handleCreateDomain))
@@ -67,6 +72,12 @@ func (s *Server) registerRoutes() {
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleOpenAPISpec(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml")
+	w.WriteHeader(http.StatusOK)
+	w.Write(openapiSpec) //nolint:errcheck
 }
 
 func (s *Server) handleListDLQ(w http.ResponseWriter, r *http.Request) {
