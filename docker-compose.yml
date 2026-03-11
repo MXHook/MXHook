@@ -1,0 +1,31 @@
+services:
+  smtp:
+    build: .
+    ports:
+      - "2525:2525"
+    environment:
+      MXHOOK_SMTP_ADDR: ":2525"
+      MXHOOK_POSTGRES_DSN: "postgres://mxhook:mxhook@postgres:5432/mxhook?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mxhook
+      POSTGRES_PASSWORD: mxhook
+      POSTGRES_DB: mxhook
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./queue/postgres/schema.sql:/docker-entrypoint-initdb.d/01-queue.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mxhook"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
