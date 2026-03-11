@@ -11,7 +11,8 @@ import (
 	"github.com/mxhook/mxhook/queue"
 )
 
-const sampleEML = `From: sender@example.com
+// workerSampleEML is defined here to avoid redeclaration with parser_test.go
+const workerSampleEML = `From: sender@example.com
 To: recipient@example.com
 Subject: Test email
 Message-ID: <test-123@example.com>
@@ -47,7 +48,7 @@ func TestWorker_ProcessesMessage(t *testing.T) {
 	ch := make(chan queue.Message, 1)
 	ch <- queue.Message{
 		ID:   "msg-1",
-		Body: []byte(sampleEML),
+		Body: []byte(workerSampleEML),
 		Meta: map[string]string{
 			"envelope_from": "sender@example.com",
 			"envelope_to_0": "recipient@example.com",
