@@ -18,7 +18,7 @@
 
 ```
 k6 run k6/smoke-test.js \
-  -e BASE_URL=https://mxhook.io \
+  -e BASE_URL=https://mxhook.dev \
   -e API_KEY=<your-api-key>
 ```
 
@@ -26,7 +26,7 @@ k6 run k6/smoke-test.js \
 
 ```
 k6 run k6/load-test.js \
-  -e BASE_URL=https://mxhook.io \
+  -e BASE_URL=https://mxhook.dev \
   -e API_KEY=<your-api-key>
 ```
 
@@ -73,7 +73,7 @@ Use `swaks` or `msmtp` for SMTP throughput validation:
 # send 100 emails via swaks (requires swaks installed)
 for i in $(seq 1 100); do
   swaks --to inbox@yourdomain.test \
-        --server mail.mxhook.io:25 \
+        --server mail.mxhook.dev:25 \
         --body "load test $i" &
 done
 wait

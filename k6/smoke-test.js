@@ -1,5 +1,5 @@
 // k6/smoke-test.js — basic smoke test (10 VUs, 30s)
-// Run: k6 run k6/smoke-test.js -e BASE_URL=https://mxhook.io -e API_KEY=<key>
+// Run: k6 run k6/smoke-test.js -e BASE_URL=https://mxhook.dev -e API_KEY=<key>
 
 import http from "k6/http";
 import { check, sleep } from "k6";

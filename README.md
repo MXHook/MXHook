@@ -13,7 +13,7 @@ Configure MX records to point to your instance. Emails arrive → parsed → rou
 
 ## Hosted SaaS
 
-**Sign up:** https://mxhook.io/signup *(coming soon)*
+**Sign up:** https://mxhook.dev/signup *(coming soon)*
 
 ### SaaS Tiers
 
@@ -52,7 +52,7 @@ SMTP edge (fly.io) → Cloudflare Queue → Worker (parse/route/deliver) → You
 
 ## Status
 
-https://mxhook.io/status.html
+https://mxhook.dev/status.html
 
 ## License
 

@@ -6,7 +6,7 @@ primary_region = "iad"
 
 [env]
   SMTP_ADDR       = ":25"
-  SMTP_DOMAIN     = "mx.mxhook.io"
+  SMTP_DOMAIN     = "mx.mxhook.dev"
   LOG_LEVEL       = "info"
 
 [[services]]

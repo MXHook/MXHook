@@ -54,7 +54,7 @@ export default {
     // ── Well-known ─────────────────────────────────────────────────────────
     if (method === "GET" && path === "/.well-known/security.txt") {
       return new Response(
-        `Contact: mailto:security@mxhook.io\nExpires: 2027-01-01T00:00:00.000Z\n`,
+        `Contact: mailto:security@mxhook.dev\nExpires: 2027-01-01T00:00:00.000Z\n`,
         { headers: { "Content-Type": "text/plain" } },
       );
     }

@@ -23,9 +23,9 @@ All items must be green before flipping public DNS.
 
 ### DNS
 
-- [ ] `mxhook.io` A/AAAA → Cloudflare Worker route
-- [ ] MX records for `mail.mxhook.io` → SMTP edge nodes
-- [ ] `status.mxhook.io` CNAME → Worker `/status.html`
+- [ ] `mxhook.dev` A/AAAA → Cloudflare Worker route
+- [ ] MX records for `mail.mxhook.dev` → SMTP edge nodes
+- [ ] `status.mxhook.dev` CNAME → Worker `/status.html`
 - [ ] SPF / DKIM / DMARC records verified
 
 ### Security
@@ -37,8 +37,8 @@ All items must be green before flipping public DNS.
 
 ### Testing
 
-- [ ] Smoke test passing: `k6 run k6/smoke-test.js -e BASE_URL=https://mxhook.io`
-- [ ] Load test passing: `k6 run k6/load-test.js -e BASE_URL=https://mxhook.io`
+- [ ] Smoke test passing: `k6 run k6/smoke-test.js -e BASE_URL=https://mxhook.dev`
+- [ ] Load test passing: `k6 run k6/load-test.js -e BASE_URL=https://mxhook.dev`
 - [ ] Manual end-to-end: send email → verify webhook delivery
 - [ ] Dashboard UI: login, view messages, view domains, billing
 

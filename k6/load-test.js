@@ -1,5 +1,5 @@
 // k6/load-test.js — ramp to 100 VUs over 5min, sustain 10min
-// Run: k6 run k6/load-test.js -e BASE_URL=https://mxhook.io -e API_KEY=<key>
+// Run: k6 run k6/load-test.js -e BASE_URL=https://mxhook.dev -e API_KEY=<key>
 
 import http from "k6/http";
 import { check, sleep } from "k6";
