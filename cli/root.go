@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -28,6 +30,7 @@ func initConfig() {
 		viper.AddConfigPath("/etc/mxhook/")
 	}
 	viper.SetEnvPrefix("MXHOOK")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	_ = viper.ReadInConfig()
 }
