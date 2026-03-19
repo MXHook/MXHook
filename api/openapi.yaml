@@ -60,6 +60,9 @@ components:
         webhook_url:
           type: string
           format: uri
+        webhook_secret:
+          type: string
+          description: "Optional HMAC-SHA256 signing secret for webhook delivery"
         created_at:
           type: string
           format: date-time
@@ -239,6 +242,24 @@ paths:
                 $ref: "#/components/schemas/Route"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /routes/{id}:
+    delete:
+      summary: Delete a route
+      operationId: deleteRoute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Route deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /messages:
     get:
