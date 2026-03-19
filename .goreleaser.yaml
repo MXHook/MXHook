@@ -1,8 +1,4 @@
-# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
-includes:
-  - from_url:
-      url: charmbracelet/meta/main/goreleaser-lib.yaml
 builds:
   - id: mxhook
     main: .
@@ -10,3 +6,7 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
+archives:
+  - format_overrides:
+      - goos: windows
+        format: zip
