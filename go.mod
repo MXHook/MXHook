@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/emersion/go-smtp v0.24.0
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jhillyerd/enmime v1.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
