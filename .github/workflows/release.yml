@@ -6,8 +6,6 @@ on:
     # first stable line.
     branches:
       - next
-  # TEMP (CI preview only, not part of the reset): exercise the preflight on a PR.
-  pull_request:
 
 permissions:
   contents: read
@@ -17,6 +15,9 @@ jobs:
   # Until then this job reports "disabled" and release-please is skipped
   # instead of failing every push.
   preflight:
+    # Release jobs run only for pushes to the trusted line, whatever the
+    # triggers above say: never for pull_request or pull_request_target.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/next' }}
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
@@ -35,13 +36,14 @@ jobs:
 
   release-please:
     needs: preflight
-    if: ${{ needs.preflight.outputs.enabled == 'true' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/next' && needs.preflight.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       # Release-bot App token: tags it pushes trigger the tag workflows, unlike
       # GITHUB_TOKEN, and no long-lived PAT exists.
@@ -60,7 +62,8 @@ jobs:
 
   release:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    # Only a release release-please just tagged on next, from a push event.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/next' && needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     runs-on: ubuntu-latest
     permissions:
       # GoReleaser uploads assets to the GitHub Release.
@@ -68,6 +71,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Build exactly the tag release-please created, never a PR ref.
+          ref: refs/tags/${{ needs.release-please.outputs.tag_name }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
