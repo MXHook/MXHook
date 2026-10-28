@@ -10,9 +10,10 @@ export async function handleDomains(req: Request, env: Env): Promise<Response> {
 
   const tenantId = sessionTenantId(session);
 
+  // Columns mirror the domains table exactly. No SPF/DKIM check results are
+  // stored anywhere in the schema, so the response omits them.
   const result = await env.DB.prepare(
-    `SELECT d.id, d.name, d.verified, d.verification_token,
-            d.spf_ok, d.dkim_ok, d.created_at,
+    `SELECT d.id, d.domain, d.verified, d.txt_record, d.created_at,
             COUNT(r.id) AS route_count
      FROM domains d
      LEFT JOIN routes r ON r.domain_id = d.id

@@ -60,6 +60,31 @@ export async function findDomain(
     .first<DomainRow>();
 }
 
+/** Oldest-first page of domains still awaiting DNS verification. */
+export async function listUnverifiedDomains(
+  db: D1Database,
+  limit: number,
+): Promise<DomainRow[]> {
+  const result = await db
+    .prepare(
+      'SELECT * FROM domains WHERE verified = 0 ORDER BY created_at ASC LIMIT ?1',
+    )
+    .bind(limit)
+    .all<DomainRow>();
+  return result.results;
+}
+
+/** Mark a domain verified. Idempotent; only ever transitions 0 → 1. */
+export async function markDomainVerified(
+  db: D1Database,
+  domainId: string,
+): Promise<void> {
+  await db
+    .prepare('UPDATE domains SET verified = 1 WHERE id = ?1')
+    .bind(domainId)
+    .run();
+}
+
 // ---------------------------------------------------------------------------
 // Route helpers
 // ---------------------------------------------------------------------------

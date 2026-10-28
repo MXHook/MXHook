@@ -1,0 +1,20 @@
+# Mirrors the CI lint gate. Install once per clone: pre-commit install
+# Revisions are frozen to commit SHAs; the comment names the release.
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: 114493f9b3e7257d29e4130f2b4a4aadefbb6845 # frozen: v2.14.0
+    hooks:
+      - id: golangci-lint-config-verify
+      - id: golangci-lint-fmt
+      - id: golangci-lint
+  - repo: https://github.com/rhysd/actionlint
+    rev: 03d0035246f3e81f36aed592ffb4bebf33a03106 # frozen: v1.7.7
+    hooks:
+      - id: actionlint
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict

@@ -1,0 +1,23 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+# Developer toolchain. Versions here must match what CI installs:
+# Go from go.mod (.github/workflows/build.yml), Node 22, golangci-lint v2.14.0
+# (.github/workflows/lint.yml).
+
+[tools]
+go = "1.27.3"
+node = "22"
+"aqua:golangci/golangci-lint" = "2.14.0"
+sqlite = "latest"
+
+[env]
+# Postgres-gated integration tests skip silently without this. The devcontainer
+# and `docker compose --profile postgres up -d postgres` both serve this DSN.
+TEST_DATABASE_URL = "postgres://mxhook:mxhook@localhost:5432/mxhook?sslmode=disable"
+
+[tasks.check]
+description = "Full local gate (delegates to make)"
+run = "make check-all"
+
+[tasks.setup]
+description = "Install worker dependencies"
+run = "make worker-deps"

@@ -4,11 +4,12 @@ info:
   description: Inbound email processing platform — manage domains, routes, messages, and webhooks.
   version: "1.0.0"
   license:
-    name: Apache 2.0
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
 
 servers:
   - url: http://localhost:8080
-    description: Local development
+    description: Local or SSH-forwarded self-hosted API
 
 security:
   - apiKey: []
@@ -85,13 +86,17 @@ components:
           format: date-time
         state:
           type: string
-          enum: [accepted, queued, parsed, routed, delivered, failed, retried, dlq]
+          enum: [processed]
       required: [id, from, to, subject, received_at, state]
 
     DLQEntry:
       type: object
       properties:
+        id:
+          type: string
         message_id:
+          type: string
+        route_id:
           type: string
         webhook_url:
           type: string
@@ -100,7 +105,11 @@ components:
           format: date-time
         reason:
           type: string
-      required: [message_id, webhook_url, failed_at, reason]
+        attempt_count:
+          type: integer
+        replay_generation:
+          type: integer
+      required: [id, message_id, failed_at, reason]
 
     Error:
       type: object
@@ -125,6 +134,35 @@ paths:
                 properties:
                   status:
                     type: string
+
+  /healthz:
+    get:
+      summary: Process liveness
+      security: []
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Process alive
+
+  /readyz:
+    get:
+      summary: Database and schema readiness
+      security: []
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Ready to serve
+        "503":
+          description: Dependency unavailable
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      security: []
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Prometheus text exposition
 
   /openapi.yaml:
     get:
@@ -193,6 +231,8 @@ paths:
           description: Domain deleted
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /routes:
     get:
@@ -229,7 +269,10 @@ paths:
                   format: uri
                 webhook_secret:
                   type: string
-              required: [domain, recipient_pattern, webhook_url]
+                  description: >-
+                    Required when the server is backed by a durable
+                    repository; optional for the in-memory store.
+              required: [webhook_url]
       responses:
         "201":
           description: Route created
@@ -237,8 +280,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Route"
+        "400":
+          description: Invalid request body, or webhook_secret/endpoint validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /routes/{id}:
+    delete:
+      summary: Delete a route
+      operationId: deleteRoute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Route deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /messages:
     get:
@@ -250,11 +317,14 @@ paths:
           schema:
             type: integer
             default: 50
+            minimum: 1
+            maximum: 100
         - name: offset
           in: query
           schema:
             type: integer
             default: 0
+            minimum: 0
       responses:
         "200":
           description: List of messages
@@ -309,6 +379,8 @@ paths:
                 properties:
                   status:
                     type: string
+                  deliveries:
+                    type: integer
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -318,6 +390,20 @@ paths:
     get:
       summary: List dead-letter queue entries
       operationId: listDLQ
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
       responses:
         "200":
           description: DLQ entries
@@ -332,7 +418,7 @@ paths:
 
   /dlq/{id}:
     delete:
-      summary: Remove a DLQ entry
+      summary: Delete a dead-letter queue entry
       operationId: deleteDLQEntry
       parameters:
         - name: id
@@ -342,8 +428,22 @@ paths:
             type: string
       responses:
         "204":
-          description: Entry removed
+          description: DLQ entry deleted
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "405":
+          description: >-
+            Repository mode retains dead deliveries; schedule a replay
+            instead of deleting.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: DLQ not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

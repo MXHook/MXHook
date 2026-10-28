@@ -24,8 +24,8 @@ async function checkR2(env: Env): Promise<ComponentHealth> {
   const start = Date.now();
   try {
     const probe = `_health/${Date.now()}`;
-    await env.BUCKET.put(probe, "1");
-    await env.BUCKET.delete(probe);
+    await env.EMAIL_STORE.put(probe, "1");
+    await env.EMAIL_STORE.delete(probe);
     return { status: "ok", latency_ms: Date.now() - start };
   } catch (e) {
     return { status: "down", error: String(e), latency_ms: Date.now() - start };

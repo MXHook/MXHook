@@ -1,7 +1,13 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -26,7 +32,26 @@ func init() {
 }
 
 func runDomainAdd(cmd *cobra.Command, args []string) error {
-	domain := args[0]
-	fmt.Fprintf(cmd.OutOrStdout(), "Registered domain: %s\n", domain)
-	return nil
+	domain := strings.ToLower(strings.TrimSpace(args[0]))
+	apiURL, _ := cmd.Flags().GetString("api-url")
+	apiKey, _ := cmd.Flags().GetString("api-key")
+	payload, _ := json.Marshal(map[string]string{"name": domain})
+	request, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, strings.TrimRight(apiURL, "/")+"/domains", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("domain add: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("X-API-Key", apiKey)
+	}
+	response, err := (&http.Client{Timeout: 10 * time.Second}).Do(request)
+	if err != nil {
+		return fmt.Errorf("domain add: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }() // response body fully consumed or abandoned; close error not actionable
+	if response.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		return fmt.Errorf("domain add: API returned %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return printf(cmd, "Registered domain: %s\n", domain)
 }

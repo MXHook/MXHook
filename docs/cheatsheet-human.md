@@ -1,22 +1,37 @@
 # MXHook Cheatsheet — Human
 
-Quick reference for daily ops. Scannable in 30 seconds.
+Quick reference for daily ops. Scannable in 30 seconds. Unfamiliar term? See the
+[glossary](glossary.md).
 
 ---
 
 ## Start
 
 ```bash
-mxhook start                                     # SMTP :25, API :8080 (defaults)
+export MXHOOK_STATE_ENCRYPTION_KEY="$(openssl rand -base64 32)"   # required
+export MXHOOK_API_KEY="$(openssl rand -hex 32)"                   # required with API
+
+mxhook start --recipient-domain example.com      # SMTP :25 → SQLite → webhook
 mxhook start --smtp-addr 0.0.0.0:2525 \
              --smtp-domain mail.example.com \
-             --api-addr 0.0.0.0:8080 \
-             --db-url postgres://...
-curl http://localhost:8080/health                 # → {"status":"ok"}
+             --recipient-domain example.com \
+             --db-url ./data/mxhook.db
+mxhook start --smtp-addr "" --maildir "$HOME/Maildir"
 ```
 
 Config file: `mxhook.yaml` (CWD) or `/etc/mxhook/mxhook.yaml`
 Env prefix: `MXHOOK_` (e.g. `MXHOOK_SMTP_ADDR`)
+
+`start` runs the whole pipeline: SMTP and/or Maildir ingress, durable enqueue,
+queue consumer, parser, route matcher, webhook outbox worker, control API,
+health endpoints, and Prometheus metrics. `--runtime-role` splits it — `all`
+(default) runs everything, `edge` runs ingress only (set `--api-addr ""`), and
+`worker` runs the consumer, delivery worker, and API with ingress disabled. See
+[the CLI reference](cli.md) for the full flag set.
+
+`--recipient-domain` is required when SMTP is enabled; startup fails without at
+least one. `all` also refuses to start until at least one route exists, durable
+or static.
 
 ### Cloudflare Queue (SaaS mode)
 
@@ -24,8 +39,11 @@ Env prefix: `MXHOOK_` (e.g. `MXHOOK_SMTP_ADDR`)
 export CF_QUEUE_ACCOUNT_ID=<id>
 export CF_QUEUE_ID=<id>
 export CF_QUEUE_TOKEN=<token>
-mxhook start     # uses CF Queue; falls back to noop if vars unset
+MXHOOK_QUEUE_BACKEND=cloudflare mxhook start
 ```
+
+All three credentials are required. Missing credentials fail startup; messages are
+never acknowledged into a no-op queue.
 
 ---
 
@@ -43,6 +61,11 @@ curl -X POST http://localhost:8080/domains \
 curl http://localhost:8080/domains -H "X-API-Key: <key>"
 curl -X DELETE http://localhost:8080/domains/<id> -H "X-API-Key: <key>"
 ```
+
+A domain added here is accepted by SMTP without a restart. Domains from
+`MXHOOK_SMTP_ALLOWED_DOMAINS` / `--recipient-domain` stay accepted as well;
+the two sources are unioned. In a split `edge`/`worker` deployment the change
+reaches the SMTP process within a few seconds rather than instantly.
 
 ---
 
@@ -88,7 +111,11 @@ curl http://localhost:8080/messages/<id> -H "X-API-Key: <key>"
 
 ### Message states
 
-`accepted` → `queued` → `parsed` → `routed` → `delivered` | `failed` | `retried` | `dlq`
+Derived from the message's delivery rows, not stored:
+
+`received` (nothing routed) · `pending` (a delivery is still in flight) ·
+`processed` (a delivery succeeded) · `dead` (all deliveries ended, none
+succeeded)
 
 ---
 
@@ -111,8 +138,12 @@ curl -X POST http://localhost:8080/replay/<id> -H "X-API-Key: <key>"
 ```bash
 # REST (no CLI command yet)
 curl http://localhost:8080/dlq -H "X-API-Key: <key>"           # list failures
-curl -X DELETE http://localhost:8080/dlq/<id> -H "X-API-Key: <key>"  # remove entry
+curl -X DELETE "http://localhost:8080/dlq/ingress:<message-id>" \
+  -H "X-API-Key: <key>"                                        # clear an ingress failure
 ```
+
+Dead deliveries are retained and cannot be deleted — `DELETE` on one returns
+`405`. Retry with `mxhook replay <message-id>` once the receiver is fixed.
 
 ---
 
@@ -121,8 +152,19 @@ curl -X DELETE http://localhost:8080/dlq/<id> -H "X-API-Key: <key>"  # remove en
 ```bash
 mxhook status                                    # probe API health
 mxhook status --api-url http://localhost:8080    # custom URL
-curl http://localhost:8080/health                # → {"status":"ok"} (no auth)
+curl http://localhost:8080/healthz               # liveness  → {"status":"ok"}
+curl http://localhost:8080/readyz                # readiness → 503 if DB is down
+curl http://localhost:8080/metrics               # Prometheus metrics
 ```
+
+`/healthz`, `/readyz`, `/health`, `/metrics`, and `/openapi.yaml` need no
+`X-API-Key`; every other endpoint does.
+
+Point a container liveness probe at `/healthz`, never at a readiness endpoint.
+`/readyz` (and its alias `/health`) pings the database and returns `503` when
+that dependency is down, so a liveness probe aimed there restarts a healthy
+process on every database blip. See
+[operations](operations.md#health-and-monitoring).
 
 ---
 
@@ -139,8 +181,32 @@ api:
   key: "your-api-key"
 
 database:
-  url: "postgres://user:pass@host/db"
+  url: "./data/mxhook.db"
+
+queue:
+  backend: "sqlite"
 ```
+
+Postgres remains available with `queue.backend: postgres` and a Postgres connection
+string in `database.url`.
+
+---
+
+## Dev Workflow
+
+```bash
+make help          # every target; also the default goal
+make check         # fmt-check, vet, test, race — run before pushing
+make check-all     # the above plus worker-check and schema-check
+make test-postgres # Postgres-gated tests; refuses without TEST_DATABASE_URL
+make schema-check  # apply worker migrations to scratch SQLite, list tables
+```
+
+Toolchain versions are pinned in `mise.toml` to match CI. Set up locally with
+`mise trust && mise install`, or open the repository in the devcontainer, which
+installs the toolchain and reuses the Compose `postgres` service so
+`TEST_DATABASE_URL` is preset and the Postgres-gated tests run instead of
+skipping. See [DEVELOPING](../DEVELOPING.md).
 
 ---
 
@@ -148,7 +214,7 @@ database:
 
 | Symptom | Fix |
 |---------|-----|
-| SMTP not receiving | Confirm MX record points to server; check port 25 not blocked |
+| SMTP not receiving | Confirm MX record points to server; check port 25 not blocked — see [DNS setup](dns-setup.md) |
 | Webhook not delivered | Check DLQ: `GET /dlq`; verify webhook URL is reachable |
 | Auth 401 | Pass `X-API-Key` header or `--api-key` flag |
 | Messages missing | Check `mxhook status`; verify `mxhook start` is running |

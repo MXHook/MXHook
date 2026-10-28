@@ -12,23 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resetRoot resets global cobra state between tests that share the Root cmd.
-func resetRoot() {
-	cli.Root.ResetFlags()
-	cli.Root.ResetCommands()
-}
-
-// executeCmd is a helper that runs the CLI root command with given args, using
-// a captured output buffer. It returns the output and any error.
-func executeCmd(args []string) (string, error) {
-	buf := &bytes.Buffer{}
-	cli.Root.SetOut(buf)
-	cli.Root.SetErr(buf)
-	cli.Root.SetArgs(args)
-	err := cli.Root.Execute()
-	return buf.String(), err
-}
-
 // ---- status command ----
 
 func TestStatusCmd_Reachable(t *testing.T) {
@@ -38,7 +21,7 @@ func TestStatusCmd_Reachable(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
 	defer srv.Close()
 
@@ -65,8 +48,8 @@ func TestStatusCmd_Unreachable(t *testing.T) {
 	cli.Root.SetErr(buf)
 	// Port 1 is unlikely to be listening; connection refused → UNREACHABLE path
 	cli.Root.SetArgs([]string{"status", "--api-url", "http://127.0.0.1:1"})
-	if err := cli.Root.Execute(); err != nil {
-		t.Fatalf("status command returned error (should swallow): %v", err)
+	if err := cli.Root.Execute(); err == nil {
+		t.Fatal("status command reported unreachable API as success")
 	}
 
 	out := buf.String()
@@ -87,7 +70,7 @@ func TestLogsCmd_WithMessages(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(messages)
+		_ = json.NewEncoder(w).Encode(messages)
 	}))
 	defer srv.Close()
 
@@ -106,9 +89,9 @@ func TestLogsCmd_WithMessages(t *testing.T) {
 }
 
 func TestLogsCmd_EmptyMessages(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]any{})
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
 	}))
 	defer srv.Close()
 
@@ -131,7 +114,7 @@ func TestLogsCmd_WithAPIKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedKey = r.Header.Get("X-API-Key")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]map[string]any{})
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
 	}))
 	defer srv.Close()
 
@@ -149,9 +132,9 @@ func TestLogsCmd_WithAPIKey(t *testing.T) {
 }
 
 func TestLogsCmd_BadJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 
@@ -163,6 +146,74 @@ func TestLogsCmd_BadJSON(t *testing.T) {
 	// Command returns an error on bad JSON decode
 	if err == nil {
 		t.Error("expected error for bad JSON response")
+	}
+}
+
+func resetLogsMessageIDFlag(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, sub := range cli.Root.Commands() {
+			if sub.Use == "logs" {
+				_ = sub.Flags().Set("message-id", "")
+			}
+		}
+	})
+}
+
+func TestLogsCmd_MessageIDFetchesSingleMessage(t *testing.T) {
+	resetLogsMessageIDFlag(t)
+	var requestedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/messages/msg-42" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg-42", "subject": "Target"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"id": "other-message"}})
+	}))
+	defer srv.Close()
+
+	buf := &bytes.Buffer{}
+	cli.Root.SetOut(buf)
+	cli.Root.SetErr(buf)
+	cli.Root.SetArgs([]string{"logs", "--api-url", srv.URL, "--message-id", "msg-42"})
+	if err := cli.Root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if requestedPath != "/messages/msg-42" {
+		t.Errorf("requested path = %q, want /messages/msg-42", requestedPath)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "msg-42") {
+		t.Errorf("expected 'msg-42' in output, got: %q", out)
+	}
+	if strings.Contains(out, "other-message") {
+		t.Errorf("expected filtered output, got full listing: %q", out)
+	}
+}
+
+func TestLogsCmd_TrailingSlashAPIURL(t *testing.T) {
+	resetLogsMessageIDFlag(t)
+	var requestedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer srv.Close()
+
+	buf := &bytes.Buffer{}
+	cli.Root.SetOut(buf)
+	cli.Root.SetErr(buf)
+	cli.Root.SetArgs([]string{"logs", "--api-url", srv.URL + "/"})
+	if err := cli.Root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if requestedPath != "/messages" {
+		t.Errorf("requested path = %q, want /messages", requestedPath)
 	}
 }
 
@@ -201,7 +252,7 @@ func TestReplayCmd_WithAPIKey(t *testing.T) {
 	var receivedKey string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedKey = r.Header.Get("X-API-Key")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusAccepted)
 	}))
 	defer srv.Close()
 
@@ -247,8 +298,9 @@ func TestDomainCmd_SubcommandHelp(t *testing.T) {
 	cli.Root.SetOut(buf)
 	cli.Root.SetErr(buf)
 	cli.Root.SetArgs([]string{"domain", "--help"})
-	// help should not return an error
-	cli.Root.Execute()
+	if err := cli.Root.Execute(); err != nil {
+		t.Fatalf("help returned error: %v", err)
+	}
 	out := buf.String()
 	if !strings.Contains(out, "domain") {
 		t.Errorf("expected 'domain' in help output, got: %q", out)
@@ -277,5 +329,8 @@ func TestRouteCmd_FlagsRegistered(t *testing.T) {
 	}
 	if routeAdd.Flags().Lookup("webhook") == nil {
 		t.Error("expected --webhook flag on route add")
+	}
+	if routeAdd.Flags().Lookup("secret") == nil {
+		t.Error("expected --secret flag on route add")
 	}
 }

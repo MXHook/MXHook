@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,14 +30,16 @@ func TestAPIKey_RequiredWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestAPIKey_NotRequiredWhenEmpty(t *testing.T) {
+// An unconfigured server has no way to authenticate anyone, so the control
+// plane is refused outright rather than served to every caller.
+func TestAPIKey_ControlPlaneClosedWhenEmpty(t *testing.T) {
 	srv := api.NewServer(api.Config{}) // no APIKey set
 
 	req := httptest.NewRequest(http.MethodGet, "/messages", nil)
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200 without configured key, got %d", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without configured key, got %d", w.Code)
 	}
 }
 
@@ -49,5 +52,25 @@ func TestAPIKey_RejectsWrongKey(t *testing.T) {
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 with wrong key, got %d", w.Code)
+	}
+}
+
+func TestAPIAuthErrorsUseJSONEnvelopeAndRequestID(t *testing.T) {
+	srv := api.NewServer(api.Config{APIKey: "secret"})
+	req := httptest.NewRequest(http.MethodGet, "/domains", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if got := w.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("content type = %q", got)
+	}
+	if got := w.Header().Get("X-Request-ID"); got == "" {
+		t.Fatal("missing X-Request-ID")
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil || body["error"] != "unauthorized" {
+		t.Fatalf("body = %v, err=%v", body, err)
 	}
 }

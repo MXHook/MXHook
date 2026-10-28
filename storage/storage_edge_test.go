@@ -41,7 +41,7 @@ func TestFilesystemStorer_Store_UnwritableDir(t *testing.T) {
 	// because something already exists at that path as a file.
 	tmp := t.TempDir()
 	blockingFile := filepath.Join(tmp, "notadir")
-	if err := os.WriteFile(blockingFile, []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(blockingFile, []byte("x"), 0o600); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestFilesystemStorer_Concurrent(t *testing.T) {
 
 	for i := range workers {
 		wg.Add(1)
-		go func(n int) {
+		go func(_ int) {
 			defer wg.Done()
 			id := filepath.Base(t.TempDir()) // unique name
 			_ = id
@@ -149,14 +149,18 @@ func TestFilesystemStorer_Store_WriteError(t *testing.T) {
 	dir := t.TempDir()
 	s := storage.NewFilesystemStorer(dir)
 
-	// Pre-create a directory at the exact path WriteFile would use,
-	// so WriteFile fails with "is a directory".
-	collidingPath := filepath.Join(dir, "conflict-id.eml")
-	if err := os.Mkdir(collidingPath, 0o755); err != nil {
+	collidingPath, err := s.Store(context.Background(), "conflict-id", []byte("seed"))
+	if err != nil {
+		t.Fatalf("seed Store: %v", err)
+	}
+	if err := os.Remove(collidingPath); err != nil {
+		t.Fatalf("remove seed: %v", err)
+	}
+	if err := os.Mkdir(collidingPath, 0o700); err != nil {
 		t.Fatalf("setup mkdir: %v", err)
 	}
 
-	_, err := s.Store(context.Background(), "conflict-id", []byte("data"))
+	_, err = s.Store(context.Background(), "conflict-id", []byte("data"))
 	if err == nil {
 		t.Fatal("expected error when WriteFile target is a directory, got nil")
 	}

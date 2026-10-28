@@ -17,8 +17,8 @@ import (
 // --- OpenAPI spec endpoint ---
 
 func TestOpenAPISpec_Returns200WithYAML(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -37,9 +37,9 @@ func TestOpenAPISpec_Returns200WithYAML(t *testing.T) {
 // --- Domain create: invalid body ---
 
 func TestDomainCreate_InvalidJSON_Returns400(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 	body := bytes.NewBufferString(`not-json`)
-	req := httptest.NewRequest(http.MethodPost, "/domains", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/domains", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -50,9 +50,9 @@ func TestDomainCreate_InvalidJSON_Returns400(t *testing.T) {
 }
 
 func TestDomainCreate_MissingName_Returns400(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 	body := bytes.NewBufferString(`{"name":""}`)
-	req := httptest.NewRequest(http.MethodPost, "/domains", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/domains", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -65,9 +65,9 @@ func TestDomainCreate_MissingName_Returns400(t *testing.T) {
 // --- Route create: invalid body ---
 
 func TestRouteCreate_InvalidJSON_Returns400(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 	body := bytes.NewBufferString(`{bad json}`)
-	req := httptest.NewRequest(http.MethodPost, "/routes", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/routes", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -78,9 +78,9 @@ func TestRouteCreate_InvalidJSON_Returns400(t *testing.T) {
 }
 
 func TestRouteCreate_MissingWebhookURL_Returns400(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 	body := bytes.NewBufferString(`{"domain":"example.com","recipient_pattern":"*@example.com"}`)
-	req := httptest.NewRequest(http.MethodPost, "/routes", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/routes", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -93,8 +93,8 @@ func TestRouteCreate_MissingWebhookURL_Returns400(t *testing.T) {
 // --- Route delete ---
 
 func TestRouteDelete_NotFound_Returns404(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodDelete, "/routes/nonexistent", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodDelete, "/routes/nonexistent", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -104,11 +104,11 @@ func TestRouteDelete_NotFound_Returns404(t *testing.T) {
 }
 
 func TestRouteDelete_Existing_Returns204(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 
 	// Create route first
 	body := bytes.NewBufferString(`{"domain":"example.com","recipient_pattern":"*@example.com","webhook_url":"https://x.com/hook"}`)
-	req := httptest.NewRequest(http.MethodPost, "/routes", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/routes", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -121,7 +121,7 @@ func TestRouteDelete_Existing_Returns204(t *testing.T) {
 	}
 
 	// Delete it
-	req2 := httptest.NewRequest(http.MethodDelete, "/routes/"+r.ID, nil)
+	req2 := authed(httptest.NewRequest(http.MethodDelete, "/routes/"+r.ID, nil))
 	w2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w2, req2)
 	if w2.Code != http.StatusNoContent {
@@ -132,8 +132,8 @@ func TestRouteDelete_Existing_Returns204(t *testing.T) {
 // --- Messages ---
 
 func TestGetMessage_Returns404(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/messages/some-id", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodGet, "/messages/some-id", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -143,8 +143,8 @@ func TestGetMessage_Returns404(t *testing.T) {
 }
 
 func TestListMessages_ReturnsEmptyArray(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/messages", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodGet, "/messages", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -163,8 +163,8 @@ func TestListMessages_ReturnsEmptyArray(t *testing.T) {
 // --- Replay ---
 
 func TestReplay_ReturnsAccepted(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodPost, "/replay/msg-1", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodPost, "/replay/msg-1", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -183,8 +183,8 @@ func TestReplay_ReturnsAccepted(t *testing.T) {
 // --- DLQ: nil dlq ---
 
 func TestDLQList_NilDLQ_ReturnsEmptyArray(t *testing.T) {
-	srv := api.NewServer(api.Config{}) // no DLQ attached
-	req := httptest.NewRequest(http.MethodGet, "/dlq", nil)
+	srv := newTestServer() // no DLQ attached
+	req := authed(httptest.NewRequest(http.MethodGet, "/dlq", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -203,8 +203,8 @@ func TestDLQList_NilDLQ_ReturnsEmptyArray(t *testing.T) {
 // --- DLQ: delete ---
 
 func TestDLQDelete_NilDLQ_Returns503(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodDelete, "/dlq/msg-1", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodDelete, "/dlq/msg-1", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -215,16 +215,18 @@ func TestDLQDelete_NilDLQ_Returns503(t *testing.T) {
 
 func TestDLQDelete_Existing_Returns204(t *testing.T) {
 	dlq := webhook.NewInMemoryDLQ()
-	dlq.Add(context.Background(), webhook.DLQEntry{ //nolint:errcheck
+	if err := dlq.Add(context.Background(), webhook.DLQEntry{
 		MessageID:  "msg-2",
 		WebhookURL: "https://example.com/hook",
 		FailedAt:   time.Now(),
 		Reason:     "timeout",
 		Payload:    []byte(`{}`),
-	})
+	}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 
-	srv := api.NewServer(api.Config{}, api.WithDLQ(dlq))
-	req := httptest.NewRequest(http.MethodDelete, "/dlq/msg-2", nil)
+	srv := newTestServer(api.WithDLQ(dlq))
+	req := authed(httptest.NewRequest(http.MethodDelete, "/dlq/msg-2", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -241,16 +243,18 @@ func (e *errDLQ) Add(_ context.Context, _ webhook.DLQEntry) error { return nil }
 func (e *errDLQ) List(_ context.Context) ([]webhook.DLQEntry, error) {
 	return nil, errors.New("backend unavailable")
 }
+
 func (e *errDLQ) Get(_ context.Context, _ string) (webhook.DLQEntry, error) {
 	return webhook.DLQEntry{}, errors.New("not found")
 }
+
 func (e *errDLQ) Remove(_ context.Context, _ string) error {
 	return errors.New("remove failed")
 }
 
 func TestDLQList_BackendError_Returns500(t *testing.T) {
-	srv := api.NewServer(api.Config{}, api.WithDLQ(&errDLQ{}))
-	req := httptest.NewRequest(http.MethodGet, "/dlq", nil)
+	srv := newTestServer(api.WithDLQ(&errDLQ{}))
+	req := authed(httptest.NewRequest(http.MethodGet, "/dlq", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -260,8 +264,8 @@ func TestDLQList_BackendError_Returns500(t *testing.T) {
 }
 
 func TestDLQDelete_BackendError_Returns404(t *testing.T) {
-	srv := api.NewServer(api.Config{}, api.WithDLQ(&errDLQ{}))
-	req := httptest.NewRequest(http.MethodDelete, "/dlq/msg-x", nil)
+	srv := newTestServer(api.WithDLQ(&errDLQ{}))
+	req := authed(httptest.NewRequest(http.MethodDelete, "/dlq/msg-x", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 
@@ -273,12 +277,12 @@ func TestDLQDelete_BackendError_Returns404(t *testing.T) {
 // --- Store List coverage: ensure iteration path with items ---
 
 func TestDomainList_AfterCreate_ReturnsItems(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 
 	// Create two domains
 	for _, name := range []string{"a.com", "b.com"} {
 		body := bytes.NewBufferString(`{"name":"` + name + `"}`)
-		req := httptest.NewRequest(http.MethodPost, "/domains", body)
+		req := authed(httptest.NewRequest(http.MethodPost, "/domains", body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(w, req)
@@ -287,7 +291,7 @@ func TestDomainList_AfterCreate_ReturnsItems(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/domains", nil)
+	req := authed(httptest.NewRequest(http.MethodGet, "/domains", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -303,10 +307,10 @@ func TestDomainList_AfterCreate_ReturnsItems(t *testing.T) {
 }
 
 func TestRouteList_AfterCreate_ReturnsItems(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 
 	body := bytes.NewBufferString(`{"domain":"example.com","recipient_pattern":"*@example.com","webhook_url":"https://x.com/hook"}`)
-	req := httptest.NewRequest(http.MethodPost, "/routes", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/routes", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -314,7 +318,7 @@ func TestRouteList_AfterCreate_ReturnsItems(t *testing.T) {
 		t.Fatalf("create got %d", w.Code)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/routes", nil)
+	req2 := authed(httptest.NewRequest(http.MethodGet, "/routes", nil))
 	w2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {

@@ -14,16 +14,18 @@ import (
 
 func TestDLQHandler_ListsEntries(t *testing.T) {
 	dlq := webhook.NewInMemoryDLQ()
-	dlq.Add(context.Background(), webhook.DLQEntry{
+	if err := dlq.Add(context.Background(), webhook.DLQEntry{
 		MessageID:  "msg-1",
 		WebhookURL: "https://example.com/hook",
 		FailedAt:   time.Now(),
 		Reason:     "500",
 		Payload:    []byte(`{"id":"msg-1"}`),
-	})
+	}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 
-	srv := api.NewServer(api.Config{}, api.WithDLQ(dlq))
-	req := httptest.NewRequest(http.MethodGet, "/dlq", nil)
+	srv := newTestServer(api.WithDLQ(dlq))
+	req := authed(httptest.NewRequest(http.MethodGet, "/dlq", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 

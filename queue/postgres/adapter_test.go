@@ -7,10 +7,10 @@ import (
 	pgqueue "github.com/mxhook/mxhook/queue/postgres"
 )
 
-func TestAdapter_ImplementsEnqueuer(t *testing.T) {
+func TestAdapter_ImplementsEnqueuer(_ *testing.T) {
 	var _ queue.Enqueuer = (*pgqueue.Adapter)(nil)
 }
 
-func TestAdapter_ImplementsDequeuer(t *testing.T) {
+func TestAdapter_ImplementsDequeuer(_ *testing.T) {
 	var _ queue.Dequeuer = (*pgqueue.Adapter)(nil)
 }

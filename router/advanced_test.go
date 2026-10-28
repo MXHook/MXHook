@@ -3,8 +3,8 @@ package router_test
 import (
 	"testing"
 
-	"github.com/mxhook/mxhook/internal/types"
 	"github.com/mxhook/mxhook/router"
+	"github.com/mxhook/mxhook/types"
 )
 
 func TestAdvancedMatcher_RegexRecipient(t *testing.T) {

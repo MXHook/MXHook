@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/jhillyerd/enmime"
-	"github.com/mxhook/mxhook/internal/types"
+	"github.com/mxhook/mxhook/types"
 )
 
 // Parser converts raw RFC 5322 email into an EmailEvent.
@@ -23,15 +23,17 @@ func (p *Parser) Parse(id, envelopeFrom string, envelopeTo []string, r io.Reader
 	}
 
 	event := &types.EmailEvent{
-		ID:           id,
-		MessageID:    env.GetHeader("Message-ID"),
-		ReceivedAt:   time.Now().UTC(),
-		EnvelopeFrom: envelopeFrom,
-		EnvelopeTo:   envelopeTo,
-		Subject:      env.GetHeader("Subject"),
-		TextBody:     env.Text,
-		HTMLBody:     env.HTML,
-		Headers:      headersToMap(env),
+		SchemaVersion: types.EmailEventSchemaV1,
+		ID:            id,
+		TraceID:       id,
+		MessageID:     env.GetHeader("Message-ID"),
+		ReceivedAt:    time.Now().UTC(),
+		EnvelopeFrom:  envelopeFrom,
+		EnvelopeTo:    envelopeTo,
+		Subject:       env.GetHeader("Subject"),
+		TextBody:      env.Text,
+		HTMLBody:      env.HTML,
+		Headers:       headersToMap(env),
 	}
 
 	for _, att := range env.Attachments {

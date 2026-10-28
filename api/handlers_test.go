@@ -11,9 +11,9 @@ import (
 )
 
 func TestDomainCreate_ReturnsCreated(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 	body := bytes.NewBufferString(`{"name":"example.com"}`)
-	req := httptest.NewRequest(http.MethodPost, "/domains", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/domains", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -34,9 +34,9 @@ func TestDomainCreate_ReturnsCreated(t *testing.T) {
 }
 
 func TestRouteCreate_ReturnsCreated(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 	body := bytes.NewBufferString(`{"domain":"example.com","recipient_pattern":"*@example.com","webhook_url":"https://x.com/hook"}`)
-	req := httptest.NewRequest(http.MethodPost, "/routes", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/routes", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -54,21 +54,23 @@ func TestRouteCreate_ReturnsCreated(t *testing.T) {
 }
 
 func TestDomainsList_ReturnsArray(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/domains", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodGet, "/domains", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("got %d, want 200", w.Code)
 	}
 	var domains []api.Domain
-	json.NewDecoder(w.Body).Decode(&domains) //nolint:errcheck
+	if err := json.NewDecoder(w.Body).Decode(&domains); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
 	// empty array is fine
 }
 
 func TestDomainDelete_NotFound(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodDelete, "/domains/nonexistent", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodDelete, "/domains/nonexistent", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
@@ -77,11 +79,11 @@ func TestDomainDelete_NotFound(t *testing.T) {
 }
 
 func TestDomainDelete_Existing(t *testing.T) {
-	srv := api.NewServer(api.Config{})
+	srv := newTestServer()
 
 	// Create domain first
 	body := bytes.NewBufferString(`{"name":"delete-me.com"}`)
-	req := httptest.NewRequest(http.MethodPost, "/domains", body)
+	req := authed(httptest.NewRequest(http.MethodPost, "/domains", body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
@@ -89,10 +91,12 @@ func TestDomainDelete_Existing(t *testing.T) {
 		t.Fatalf("create got %d, want 201", w.Code)
 	}
 	var d api.Domain
-	json.NewDecoder(w.Body).Decode(&d) //nolint:errcheck
+	if err := json.NewDecoder(w.Body).Decode(&d); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
 
 	// Delete it
-	req2 := httptest.NewRequest(http.MethodDelete, "/domains/"+d.ID, nil)
+	req2 := authed(httptest.NewRequest(http.MethodDelete, "/domains/"+d.ID, nil))
 	w2 := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w2, req2)
 	if w2.Code != http.StatusNoContent {
@@ -101,13 +105,15 @@ func TestDomainDelete_Existing(t *testing.T) {
 }
 
 func TestRoutesList_ReturnsArray(t *testing.T) {
-	srv := api.NewServer(api.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/routes", nil)
+	srv := newTestServer()
+	req := authed(httptest.NewRequest(http.MethodGet, "/routes", nil))
 	w := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("got %d, want 200", w.Code)
 	}
 	var routes []api.Route
-	json.NewDecoder(w.Body).Decode(&routes) //nolint:errcheck
+	if err := json.NewDecoder(w.Body).Decode(&routes); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
 }

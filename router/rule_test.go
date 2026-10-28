@@ -3,8 +3,8 @@ package router_test
 import (
 	"testing"
 
-	"github.com/mxhook/mxhook/internal/types"
 	"github.com/mxhook/mxhook/router"
+	"github.com/mxhook/mxhook/types"
 )
 
 // ---- Rule constants ----
@@ -60,47 +60,6 @@ func TestRule_FullFields(t *testing.T) {
 	if r.Priority != 10 {
 		t.Errorf("Priority = %d, want 10", r.Priority)
 	}
-}
-
-// ---- Engine additional coverage ----
-
-func TestEngine_InMemory_Empty(t *testing.T) {
-	e := router.NewEngineInMemory(nil)
-	rules, err := e.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(rules) != 0 {
-		t.Errorf("expected 0 rules, got %d", len(rules))
-	}
-}
-
-func TestEngine_InMemory_Multiple(t *testing.T) {
-	rules := []router.Rule{
-		{ID: "1", RecipientPattern: "a@example.com", Target: router.TargetWebhook},
-		{ID: "2", RecipientPattern: "b@example.com", Target: router.TargetQueue},
-		{ID: "3", RecipientPattern: "*@example.com", Target: router.TargetStorage, IsCatchAll: true},
-	}
-	e := router.NewEngineInMemory(rules)
-	loaded, err := e.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(loaded) != 3 {
-		t.Fatalf("expected 3 rules, got %d", len(loaded))
-	}
-	// Verify it returns a copy (mutation must not affect engine)
-	loaded[0].ID = "mutated"
-	reloaded, _ := e.Load()
-	if reloaded[0].ID == "mutated" {
-		t.Error("Load returned a reference, not a copy")
-	}
-}
-
-func TestEngine_Close_NilTicker(t *testing.T) {
-	// NewEngineInMemory does not set ticker; Close must not panic
-	e := router.NewEngineInMemory([]router.Rule{})
-	e.Close() // must not panic
 }
 
 // ---- Matcher additional coverage ----

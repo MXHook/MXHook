@@ -3,6 +3,8 @@
 import type { Env, EmailEvent } from "./types";
 import { processEmailEvent } from "./router";
 import { htmlResponse, errorResponse } from "./http";
+import { decodeIngressMessage } from "./ingress";
+import { verifyDomains, MAX_DOMAINS_PER_RUN, type FetchLike } from "./verify";
 
 // Dashboard
 import { handleMessages }      from "./dashboard/messages";
@@ -123,8 +125,12 @@ export default {
     const { checkAbuse } = await import("./abuse");
 
     for (const msg of batch.messages) {
-      const event = msg.body as EmailEvent;
       try {
+        if (isHealthProbe(msg.body)) {
+          msg.ack();
+          continue;
+        }
+        const event: EmailEvent = await decodeIngressMessage(msg.body);
         const report = await checkAbuse(event, env);
 
         if (report.action === "block") {
@@ -140,9 +146,46 @@ export default {
         await processEmailEvent(event, env);
         msg.ack();
       } catch (err) {
-        console.error(`[queue] error processing ${event.message_id ?? event.id}:`, err);
+        console.error("[queue] error processing message:", err);
         msg.retry();
       }
     }
   },
+
+  // Cron consumer — hourly DNS TXT verification of pending domains.
+  // Backs the `crons` trigger in wrangler.toml.
+  async scheduled(event: ScheduledController, env: Env): Promise<void> {
+    await runDomainVerification(event.cron, env);
+  },
 } satisfies ExportedHandler<Env>;
+
+async function runDomainVerification(cron: string, env: Env): Promise<void> {
+  try {
+    const summary = await verifyDomains(
+      env.DB,
+      fetch as unknown as FetchLike,
+      MAX_DOMAINS_PER_RUN,
+    );
+
+    for (const r of summary.results) {
+      if (r.outcome === "verified") {
+        console.info(`[verify] ${r.domain} verified`);
+      } else if (r.outcome === "error") {
+        console.warn(`[verify] ${r.domain} lookup failed: ${r.reason}`);
+      }
+    }
+
+    console.info(
+      `[verify] cron=${cron} examined=${summary.examined} verified=${summary.verified} ` +
+      `unverified=${summary.unverified} errors=${summary.errors}`,
+    );
+  } catch (err) {
+    // Never let a scheduled run throw — the next hourly tick retries.
+    console.error("[verify] run failed:", err);
+  }
+}
+
+function isHealthProbe(value: unknown): value is { type: "_health_probe" } {
+  return typeof value === "object" && value !== null &&
+    "type" in value && value.type === "_health_probe";
+}

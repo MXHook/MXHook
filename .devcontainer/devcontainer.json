@@ -1,0 +1,34 @@
+{
+  "name": "mxhook",
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.devcontainer.yml"
+  ],
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  "runServices": ["devcontainer", "postgres"],
+  "overrideCommand": true,
+  // Runs on the host before compose parses the files, which is required:
+  // docker-compose.yml resolves ${VAR:?} guards at parse time, so .env must
+  // already exist. It is gitignored, hence seeded from the tracked template.
+  "initializeCommand": "cp -n .devcontainer/.env.example .devcontainer/.env || true",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "dbaeumer.vscode-eslint",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "go.toolsManagement.autoUpdate": false,
+        "go.lintTool": "golangci-lint",
+        "gopls": {
+          "build.buildFlags": ["-buildvcs=false"]
+        }
+      }
+    }
+  }
+}

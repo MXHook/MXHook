@@ -1,10 +1,11 @@
 package router
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/mxhook/mxhook/internal/types"
+	"github.com/mxhook/mxhook/types"
 )
 
 // AdvancedRule extends Rule with regex recipient matching and header conditions.
@@ -37,7 +38,7 @@ func NewAdvancedMatcher(rules []AdvancedRule) (*AdvancedMatcher, error) {
 		if r.RecipientRegex != "" {
 			rx, err := regexp.Compile(r.RecipientRegex)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("router: compile recipient regex %q: %w", r.RecipientRegex, err)
 			}
 			cr.regex = rx
 		}

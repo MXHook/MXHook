@@ -1,316 +1,178 @@
-# Architecture — MXHook
+# MXHook architecture
 
-Author: $USER
-Date: 2026-03-25
+MXHook is a Go 1.27 single binary. The self-hosted runtime uses SQLite by
+default and Postgres optionally. SMTP and Maildir share one versioned ingress
+contract and one durable processing pipeline.
 
----
+## Production pipeline
 
-## Overview
-
-Open-source inbound email webhook platform.
-Receives SMTP email → parses → routes → delivers structured JSON webhooks.
-
----
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Go 1.26 (single binary, vendored deps) |
-| SMTP | `github.com/emersion/go-smtp` |
-| Email parsing | `github.com/jhillyerd/enmime` |
-| CLI | cobra + viper |
-| HTTP API | stdlib `net/http` (Go 1.22+ pattern routing) |
-| Queue (default) | Postgres (`queue/postgres`) |
-| Queue (SaaS) | Cloudflare Queue (`queue/cloudflare`) |
-| Metrics | Prometheus (`internal/metrics`) |
-| Deployment | Docker multi-stage (golang:1.26-alpine → alpine:3.23) |
-
----
-
-## Pipeline
-
-```
-SMTP connection
-  → session.Data() [smtp/server.go]
-  → queue.Enqueuer.Enqueue()
-  → parser.Worker [parser/worker.go]
-  → types.EmailEvent [internal/types/email.go]
-  → router.Engine [router/engine.go]
-  → webhook.Deliverer [webhook/delivery.go]
-  → POST endpoint with X-MXHook-Signature (HMAC-SHA256)
+```text
+SMTP / Maildir
+  -> versioned ingress envelope (mxhook.message.v1)
+  -> durable ingress queue (SQLite or Postgres)
+  -> lease-fenced intake worker
+  -> owner-only raw message storage
+  -> MIME parser and route matcher
+  -> transactional event + delivery outbox
+  -> lease-fenced delivery worker
+  -> HTTPS webhook with HMAC and stable delivery ID
 ```
 
-Failed deliveries land in `webhook.DLQ`.
+An ingress source reports success only after durable queue insertion. The intake
+worker acknowledges the queue item only after event and delivery rows commit.
+A crash before acknowledgement causes safe, idempotent redelivery. Webhook
+attempts and retry schedules live in the database, so restarts do not reset
+them.
 
----
+Delivery is at-least-once. Receivers must deduplicate on
+`X-MXHook-Delivery-ID`.
 
-## Package Map
+## Choosing an ingestion path
 
-| Package | Responsibility |
-|---|---|
-| `smtp/` | SMTP server; recipient validation; enqueue raw messages |
-| `parser/` | RFC 5322 → `EmailEvent`; worker loop; MIME/attachment parsing |
-| `router/` | Matcher (wildcard + plus-addressing); domain config; engine |
-| `webhook/` | Deliverer (retry + backoff); HMAC signer; DLQ; replay |
-| `queue/` | `Enqueuer`/`Dequeuer` interfaces; postgres + cloudflare adapters |
-| `storage/` | Raw `.eml` + attachment storage interface |
-| `api/` | REST API server; API-key auth middleware |
-| `cli/` | Commands: `start`, `domain`, `route`, `logs`, `replay`, `status` |
-| `ee/` | Enterprise Edition license gating |
-| `internal/types/` | `EmailEvent`, `Attachment` structs |
-| `internal/metrics/` | Prometheus counters |
-| `internal/lifecycle/` | Graceful shutdown helpers |
+Three ingress paths exist. Only the first two are part of the self-hosted
+production release.
 
----
+| | Own MX (SMTP) | Maildir | Cloudflare worker |
+|---|---|---|---|
+| Maturity | production | production | **experimental**, hosted-service work |
+| Enabled by | `--smtp-addr` (default `0.0.0.0:25`) | `--maildir <root>` | `--queue-backend cloudflare` plus a separately deployed consumer |
+| Inbound port 25 | required, open to the internet | none | none on your host |
+| Static IP and PTR | needed for deliverability; many hosts block outbound and inbound 25 | not needed | not needed |
+| TLS certificate | needed for STARTTLS (`--smtp-tls-cert`, `--smtp-tls-key`, `--smtp-require-tls`); MXHook does not do implicit TLS | not needed | terminated at the edge |
+| DNS | MX record for each accepted domain | whatever the upstream mail host requires | edge-node dependent |
+| Envelope recipient | authoritative, from the SMTP `RCPT TO` command | reconstructed from a header (`--maildir-recipient-header`, default `Delivered-To`) or `--maildir-default-recipient` | carried in the ingress envelope |
+| Trust boundary | you run the MTA | the local MTA writing the Maildir must be the one injecting the recipient header | edge publisher must be authenticated |
+| Setup guide | [DNS setup](dns-setup.md) | [Maildir ingestion](maildir.md) | none; see the caveats below |
 
-## Core Types
+Pick **own MX** when you control a host that can accept inbound port 25, want
+the envelope recipient straight from `RCPT TO` with no header trust question,
+and are willing to own an MX record, a certificate, and reverse DNS.
 
-See `internal/types/email.go`:
+Pick **Maildir** when port 25 is blocked, unavailable, or not worth operating:
+an existing mail server, a provider such as exe.dev, or a forwarding rule from
+Google Workspace or Fastmail drops messages onto the filesystem and MXHook
+drains them. This is the lowest-friction on-ramp, and it sidesteps every port
+25, PTR, and certificate concern. Its one hard requirement is a recipient
+header MXHook can trust, because Maildir does not standardize the envelope
+recipient. See [Maildir ingestion](maildir.md).
 
-```
-EmailEvent
-  ID, MessageID    string
-  ReceivedAt       time.Time
-  EnvelopeFrom     string
-  EnvelopeTo       []string
-  Headers          map[string][]string
-  Subject          string
-  TextBody         string
-  HTMLBody         string
-  RawPath          string       // path/key to .eml in storage
-  Attachments      []Attachment
+Both paths can run in one process; `all` and `edge` roles accept SMTP, Maildir,
+or both, and refuse to start with neither.
 
-Attachment
-  Filename, ContentType  string
-  Size                   int64
-  StoragePath            string
-```
+### Hosted Cloudflare target
 
----
+The `worker/` and Cloudflare queue adapter are experimental. They share the
+versioned ingress envelope but are not part of the self-hosted production
+release: inline Queue payload limits, resource provisioning, tenant isolation,
+and D1/R2 contract tests remain hosted-service work. Selecting Cloudflare for
+an edge publisher requires explicit credentials and a separately operated
+consumer.
+
+The real topology is **fly.io SMTP edge nodes -> Cloudflare Queue -> Worker
+consumer**. `worker/src/index.ts` exports exactly two handlers, `fetch` (the
+dashboard, admin, and status HTTP surface) and `queue` (the batch consumer for
+`mxhook-email-events`). `worker/wrangler.toml` declares a queue consumer, a D1
+database, and an R2 bucket.
+
+This is **not** Cloudflare Email Routing. There is no `email()` handler, no
+`send_email` binding, and no `EmailMessage` import anywhere in `worker/`;
+mail never reaches the Worker from Cloudflare's mail infrastructure. The SMTP
+conversation still happens on an edge node you operate, which publishes the
+ingress envelope onto the queue.
+
+The Cloudflare queue backend also does not deduplicate by delivery ID, so a
+crash-retry re-enqueues the same message and consumers see duplicates. Prefer
+the SQLite or Postgres queue whenever consumers cannot dedupe themselves.
+
+## Runtime roles
+
+| Role | Ingress | Processing | API/metrics |
+|---|---|---|---|
+| `all` | SMTP and/or Maildir | yes | yes unless disabled |
+| `edge` | SMTP and/or Maildir | no | disabled |
+| `worker` | disabled | yes | yes unless disabled |
+
+`all` is the production default. Split roles require a shared Postgres queue;
+embedded SQLite is intended for one process.
+
+## Storage and state
+
+The selected database contains both the ingress queue and operational state.
+SQLite enables WAL, foreign keys, a busy timeout, bounded connections, and
+owner-only database/WAL/SHM files. Postgres uses the same receipt-fenced queue
+and outbox contracts.
+
+Raw messages are stored before parsing under opaque SHA-256-derived names. File
+creation is atomic and no-clobber. Directories use mode `0700`; files use
+`0600`. Symlinks, traversal, and non-regular Maildir entries are rejected.
+
+Webhook secrets are encrypted with AES-256-GCM using
+`MXHOOK_STATE_ENCRYPTION_KEY`. The key is never stored in the database. Losing
+it makes route secrets unrecoverable; back it up separately.
+
+## Message contract
+
+`mxhook.message.v1` includes stable message and trace IDs, receipt time, source,
+source ID, envelope sender, ordered recipients, raw content hash and size, and
+the raw RFC 5322 bytes. All queue adapters validate it before persistence.
 
 ## Routing
 
-Rules defined in `router/rule.go`. Matching in `router/matcher.go`.
+Rule precedence is priority, then exact address, plus-address normalization,
+domain wildcard (`*@example.com`), and global wildcard (`*`). A configured
+static webhook route has low priority; API-created rules override it. Routes
+snapshot destination and encrypted secret into each delivery row so later
+configuration changes cannot mutate an existing delivery.
 
-### Match precedence (all after plus-address strip)
+## Webhook delivery
 
-1. Exact: `support@domain.com`
-2. Plus-stripped: `task+label@domain.com` → matches rule for `task@domain.com`
-3. Wildcard: `*@domain.com`
-4. Catch-all flag (`IsCatchAll: true`)
+Requests use HTTPS and include:
 
-### Targets
+- `X-MXHook-Signature: sha256=<HMAC-SHA256 of "{unix_ts}.{payload}">`
+- `X-MXHook-Timestamp: <unix seconds>` (signed; bounds the replay window)
+- `X-MXHook-Delivery-ID`
+- message, trace, and attempt identifiers
 
-- `webhook` — HTTP POST to `WebhookURL`
-- `queue` — forward to queue backend
-- `storage` — store only, no delivery
+Receivers verify with `webhook.VerifyTimestampedSignature`, which rejects
+timestamps outside the tolerance window (default five minutes). The legacy
+payload-only scheme (no timestamp header) is verifiable only through the
+explicit `webhook.VerifySignature` path and carries no replay protection.
 
----
+Targets with credentials, private/loopback/link-local/multicast addresses, or
+non-HTTPS schemes are rejected. DNS is resolved again at dial time. Redirects
+are bounded and revalidated. Network failures, `408`, `429`, and `5xx` retry
+with durable jittered backoff; other `4xx` responses become terminal.
 
-## Webhook Delivery
+## Control plane
 
-- **Signature header:** `X-MXHook-Signature: sha256=<hmac-hex>`
-- **Algorithm:** HMAC-SHA256 (`webhook/signer.go`)
-- **Retry:** 3 attempts, quadratic backoff (1s, 4s, 9s)
-- **DLQ:** `webhook/dlq.go` — inspect via `GET /dlq`, replay via `POST /replay/{id}`
+The HTTP server uses bounded bodies, responses, pagination, and timeouts.
+`X-API-Key` protects all control-plane endpoints. Responses carry a generated
+`X-Request-ID`; errors use a JSON `{"error":"..."}` envelope. Public endpoints:
 
-Receiver verification (pseudocode):
+| Path | Meaning |
+|---|---|
+| `/healthz` | process liveness |
+| `/readyz` and `/health` | database readiness |
+| `/metrics` | Prometheus metrics |
 
-```
-ok = VerifySignature(requestBody, sharedSecret, header["X-MXHook-Signature"])
-```
+Domains, routes, messages, delivery state, ingress failures, and replay state
+are durable. Route secrets are accepted on creation but never returned.
+Terminal history is retained; replay schedules a new delivery generation.
 
-See `webhook.VerifySignature()` for constant-time comparison implementation.
+See [the OpenAPI contract](../api/openapi.yaml).
 
----
+## Package map
 
-## REST API
-
-Auth: `X-API-Key` header. Set via `MXHOOK_API_KEY` env or `api.key` config.
-OpenAPI spec: `GET /openapi.yaml` (embedded at build time).
-
-| Method | Path | Auth |
-|---|---|---|
-| GET | `/health` | — |
-| POST | `/domains` | yes |
-| GET | `/domains` | yes |
-| DELETE | `/domains/{id}` | yes |
-| POST | `/routes` | yes |
-| GET | `/routes` | yes |
-| DELETE | `/routes/{id}` | yes |
-| GET | `/messages` | yes |
-| GET | `/messages/{id}` | yes |
-| POST | `/replay/{id}` | yes |
-| GET | `/dlq` | yes |
-| DELETE | `/dlq/{id}` | yes |
-
----
-
-## Configuration
-
-Config resolution order: `mxhook.yaml` (cwd) → `/etc/mxhook/mxhook.yaml` → `MXHOOK_*` env vars.
-
-Key SMTP config fields:
-
-```
-Addr            string    # ":25" or ":2525"
-Domain          string    # MX hostname
-AllowedDomains  []string  # accepted recipient domains; empty = accept all
-MaxMessageBytes int64     # default 25 MB
-TLSCertFile, TLSKeyFile string
-```
-
----
-
-## Queue Backends
-
-| Backend | Import path | Notes |
-|---|---|---|
-| Postgres | `queue/postgres` | Default; durable; retry-friendly |
-| Cloudflare | `queue/cloudflare` | Used in hosted SaaS |
-| Noop | `queue.NoopEnqueuer` | Tests / dry-run |
-
----
-
-## Known Pitfalls
-
-- `AllowedDomains` empty → open relay; restrict in production
-- Plus-addressing stripped **before** rule matching — design intent, not a bug
-- Webhook secret optional; signature still sent even if empty
-- DLQ must be wired via `api.WithDLQ(dlq)` — nil DLQ returns empty list silently
-- EE packages gated by `ee/license.go`; check license before extending EE
-- No auth on SMTP inbound — correct for a public MX server
-
----
-
-## Build & Test
-
-```bash
-# Build
-docker build -t mxhook .
-
-# Test per-package (no justfile present)
-go test ./smtp/...
-go test ./parser/...
-go test ./router/...
-go test ./webhook/...
-go test ./api/...
-```
-
----
-
-## Log States
-
-```
-SMTP accepted → Parsed → Queued → Delivered
-                                → Failed → Retried → DLQ
-```
-
----
-
-# 2026-04-26 update — SaaS deployment stack
-
-> **Scope.** The body above documents the self-hosted Go
-> binary architecture. This section adds the SaaS deployment
-> stack (Cloudflare Workers, D1, R2, Fly.io edge, abuse
-> mitigation, admin panel) and the commercialisation gap
-> against the 90-day plan.
-
-## Cross-references
-
-- [hop](https://github.com/hop-top/hop/blob/main/docs/architecture.md) — orchestrator (deployment seam)
-- [kit](https://github.com/hop-top/kit/blob/main/docs/architecture.md) — adoption tracked as `mxhook/mxhook#T-0058`
-
-## SaaS architecture
-
-```
-                 ┌──────────────────────────────────┐
-                 │  Inbound mail (MX → Fly.io edge) │
-                 └─────────────────┬────────────────┘
-                                   │
-                                   ▼ Cloudflare Queue publish
-                       ┌───────────────────────┐
-                       │   Cloudflare Worker   │
-                       │  (queue consumer)     │
-                       └─────────┬─────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                  ▼
-      ┌──────────────┐    ┌──────────────┐   ┌───────────────┐
-      │  D1 (tenant │    │  R2 (.eml +  │   │  Webhook      │
-      │  + delivery │    │  attachments)│   │  delivery     │
-      │  logs)      │    │              │   │  (HMAC signed)│
-      └──────────────┘    └──────────────┘   └───────────────┘
-```
-
-| Component | Tech | Role |
-|---|---|---|
-| SMTP edge | Fly.io node | Inbound mail relay |
-| Async queue | Cloudflare Queue | Replaces Postgres queue in SaaS |
-| Control plane | Cloudflare Worker (`worker/src/`) | Parse, route, deliver per tenant |
-| Tenant + billing store | Cloudflare D1 (`worker/src/db.ts`) | Accounts, routes, delivery logs, usage metering |
-| Object storage | Cloudflare R2 | Raw `.eml` + attachments |
-| Reverse proxy / TLS | Cloudflare | Default platform |
-
-## SaaS dashboards (TS, in `worker/src/`)
-
-| Surface | Auth | Purpose |
-|---|---|---|
-| Customer dashboard | Session + cookie | Tenant: domains, routes, messages, billing |
-| Admin panel | Admin API key | Ops: tenant mgmt, abuse logs, system health |
-| Status page | — | Public uptime + incidents |
-
-Implemented under tasks T-0046 (dashboard), T-0047 (admin
-panel), T-0048 (abuse mitigation), T-0049 (status page).
-
-## Commercialisation gap (vs 90-day plan)
-
-The 90-day plan (Month 1, May 2026) calls for:
-
-- [ ] Stripe integration live — **not coded**
-- [ ] Pricing page published — **not live** (README has tiers Free / $9 / $49 / Contact)
-- [ ] SaaS signup flow — **partial** (dashboard exists; account creation pipeline unclear)
-- [ ] Usage metering + billing — **not built** (no Stripe webhook receiver; no meter event collection)
-- [ ] HN / r/selfhosted / dev.to launch — **not posted**
-
-Self-hosted is fully functional; SaaS dashboard + admin panels
-live; **revenue loop is incomplete**.
-
-## kit adoption
-
-Task: `mxhook/mxhook#T-0058` (filed 2026-04-26). UI components
-not yet integrated. Worker dashboard uses vanilla TS / HTML;
-opportunity to unify with kit on adoption.
-
-## Recent activity
-
-- `9514aa0` add human + agent cheatsheets
-- `ab5a0ba` rename mxhook.io → mxhook.dev
-- `e1269a0` Go 1.24 → 1.26
-- `e66b330` MIT + BSL 1.1 licenses
-- `490ca9d` comprehensive test coverage
-- `986c8d9` load tests + security review + launch checklist (T-0050)
-- `92b1e0a` worker status page (T-0049)
-- `9c87870` worker abuse mitigation (T-0048)
-- `7bbda69` worker admin panel (T-0047)
-- `9ebc322` worker dashboard API + UI (T-0046)
-- `4b273be` wire parser / router / delivery into queue consumer
-- `5ddfd88` D1 schema + helpers
-- `86b657a` scaffold Worker + queue + D1 + R2 bindings
-- `28d11a5` Fly.io SMTP edge + CF Queue publisher
-- `0d1dc4f` EE advanced rule engine (regex + header matching)
-- `bed4142` API: domain / route / message handlers
-- `7e242dc` API: OpenAPI 3.1 spec + GET /openapi.yaml endpoint
-- `fe5b1ce` EE license gate (`Gate()` and `Require()`)
-
-## Open questions
-
-1. **Stripe webhook consumer.** `POST /webhooks/stripe` lives in self-hosted API or Worker?
-2. **Metering collection.** Worker middleware or dashboard API?
-3. **Signup flow.** Worker (`worker/src/`) or external (Auth0 / Clerk)?
-4. **Kit integration.** Stripe checkout UI uses kit components or external Stripe Checkout?
-5. **Self-hosted billing.** Stripe usable in self-hosted or only SaaS?
-6. **DLQ in SaaS.** D1 table or separate? `worker/src/dlq.ts` not found.
-7. **Email forwarding.** Routes can forward to Gmail / other MX?
-8. **Rate limiting.** Worker abuse (`worker/src/abuse.ts`) thresholds not in config — exposed to tenants?
+| Package | Responsibility |
+|---|---|
+| `smtp/` | restricted-domain SMTP, STARTTLS, durable enqueue |
+| `maildir/` | exclusive claims, recovery, quarantine, durable enqueue |
+| `queue/sqlite/`, `queue/postgres/` | ingress queue and fenced leases |
+| `parser/` | RFC 5322 and MIME parsing |
+| `router/` | rule matching |
+| `storage/` | hardened raw message storage |
+| `internal/state/` | schema, events, encrypted routes, delivery outbox |
+| `internal/runtime/` | intake and delivery workers |
+| `webhook/` | endpoint validation, signing, HTTP delivery |
+| `api/` | persistent control API, health, metrics |
+| `cli/` | composition root and operator commands |

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mxhook/mxhook/internal/types"
+	"github.com/mxhook/mxhook/types"
 	"github.com/mxhook/mxhook/webhook"
 )
 
@@ -32,13 +32,13 @@ func TestNewDeliverer_Defaults(t *testing.T) {
 
 func TestDelivery_AllAttemptsFail(t *testing.T) {
 	attempts := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
-	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 3, TimeoutSecs: 5})
+	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 3, TimeoutSecs: 5, AllowHTTP: true, AllowPrivateNetwork: true})
 	err := d.Deliver(context.Background(), webhook.Endpoint{URL: srv.URL, Secret: "s"}, &types.EmailEvent{ID: "x"})
 	if err == nil {
 		t.Fatal("expected error after all attempts fail")
@@ -57,7 +57,7 @@ func TestDelivery_AllAttemptsFail(t *testing.T) {
 
 func TestDelivery_ContextCancelled(t *testing.T) {
 	// Server always fails so we enter the retry wait; cancel there.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
@@ -65,7 +65,7 @@ func TestDelivery_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Cancel after the first failed attempt so we hit the ctx.Done() branch.
-	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 5, TimeoutSecs: 5})
+	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 5, TimeoutSecs: 5, AllowHTTP: true, AllowPrivateNetwork: true})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -94,13 +94,13 @@ func TestDelivery_ContextCancelled(t *testing.T) {
 
 func TestDelivery_LargeResponseBody(t *testing.T) {
 	body := bytes.Repeat([]byte("x"), 8192)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(body) //nolint:errcheck
+		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
-	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 5})
+	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 5, AllowHTTP: true, AllowPrivateNetwork: true})
 	err := d.Deliver(context.Background(), webhook.Endpoint{URL: srv.URL, Secret: "s"}, &types.EmailEvent{ID: "big"})
 	if err != nil {
 		t.Fatalf("expected success with large response body, got: %v", err)
@@ -108,25 +108,24 @@ func TestDelivery_LargeResponseBody(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Delivery with non-2xx that should NOT retry (e.g. 400 Bad Request)
-// Note: current implementation retries on ALL non-2xx, so all MaxAttempts are used.
+// Delivery with permanent non-2xx that must not retry (e.g. 400 Bad Request)
 // ---------------------------------------------------------------------------
 
-func TestDelivery_Non2xx_ExhaustsRetries(t *testing.T) {
+func TestDelivery_Permanent4xxIsNotRetried(t *testing.T) {
 	attempts := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		w.WriteHeader(http.StatusBadRequest) // 400
 	}))
 	defer srv.Close()
 
-	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 2, TimeoutSecs: 5})
+	d := webhook.NewDeliverer(webhook.Config{MaxAttempts: 2, TimeoutSecs: 5, AllowHTTP: true, AllowPrivateNetwork: true})
 	err := d.Deliver(context.Background(), webhook.Endpoint{URL: srv.URL, Secret: "s"}, &types.EmailEvent{ID: "bad"})
 	if err == nil {
 		t.Fatal("expected error for non-2xx")
 	}
-	if attempts != 2 {
-		t.Errorf("expected 2 attempts for non-2xx, got %d", attempts)
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt for permanent 4xx, got %d", attempts)
 	}
 }
 
@@ -195,137 +194,6 @@ func TestDLQ_ConcurrentWrites(t *testing.T) {
 	}
 	if len(entries) == 0 {
 		t.Error("expected entries after concurrent writes")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Replay: message not in DLQ returns error
-// ---------------------------------------------------------------------------
-
-func TestReplay_MessageNotInDLQ(t *testing.T) {
-	dlq := webhook.NewInMemoryDLQ()
-	replayer := webhook.NewReplayer(dlq, webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 5}))
-
-	err := replayer.Replay(context.Background(), "missing-id", "")
-	if err == nil {
-		t.Fatal("expected error for missing DLQ message")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Replay: delivery failure keeps message in DLQ
-// ---------------------------------------------------------------------------
-
-func TestReplay_DeliveryFailureKeepsInDLQ(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	dlq := webhook.NewInMemoryDLQ()
-	dlq.Add(context.Background(), webhook.DLQEntry{ //nolint:errcheck
-		MessageID:  "fail-msg",
-		WebhookURL: srv.URL,
-		FailedAt:   time.Now(),
-		Payload:    []byte(`{"id":"fail-msg"}`),
-	})
-
-	replayer := webhook.NewReplayer(dlq, webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 5}))
-	err := replayer.Replay(context.Background(), "fail-msg", "")
-	if err == nil {
-		t.Fatal("expected error when replay delivery fails")
-	}
-
-	// Message should still be in the DLQ after a failed replay.
-	_, getErr := dlq.Get(context.Background(), "fail-msg")
-	if getErr != nil {
-		t.Errorf("expected message to remain in DLQ after failed replay, but got: %v", getErr)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Replay: override URL is used instead of stored URL
-// ---------------------------------------------------------------------------
-
-func TestReplay_OverrideURL(t *testing.T) {
-	// Original URL returns 500, override URL returns 200.
-	badSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer badSrv.Close()
-
-	delivered := false
-	goodSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delivered = true
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer goodSrv.Close()
-
-	dlq := webhook.NewInMemoryDLQ()
-	dlq.Add(context.Background(), webhook.DLQEntry{ //nolint:errcheck
-		MessageID:  "override-msg",
-		WebhookURL: badSrv.URL,
-		FailedAt:   time.Now(),
-		Payload:    []byte(`{"id":"override-msg"}`),
-	})
-
-	replayer := webhook.NewReplayer(dlq, webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 5}))
-	if err := replayer.Replay(context.Background(), "override-msg", goodSrv.URL); err != nil {
-		t.Fatalf("Replay with override URL failed: %v", err)
-	}
-	if !delivered {
-		t.Error("expected delivery to override URL")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Replay: rawPost bad URL returns error
-// ---------------------------------------------------------------------------
-
-func TestReplay_BadURL(t *testing.T) {
-	dlq := webhook.NewInMemoryDLQ()
-	dlq.Add(context.Background(), webhook.DLQEntry{ //nolint:errcheck
-		MessageID:  "bad-url-msg",
-		WebhookURL: "http://127.0.0.1:0", // nothing listening
-		FailedAt:   time.Now(),
-		Payload:    []byte(`{"id":"bad-url"}`),
-	})
-
-	replayer := webhook.NewReplayer(dlq, webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 1}))
-	err := replayer.Replay(context.Background(), "bad-url-msg", "")
-	if err == nil {
-		t.Fatal("expected error for bad URL")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Replay: non-2xx from rawPost returns error
-// ---------------------------------------------------------------------------
-
-func TestReplay_RawPost_Non2xx(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer srv.Close()
-
-	dlq := webhook.NewInMemoryDLQ()
-	dlq.Add(context.Background(), webhook.DLQEntry{ //nolint:errcheck
-		MessageID:  "forbidden-msg",
-		WebhookURL: srv.URL,
-		FailedAt:   time.Now(),
-		Payload:    []byte(`{"id":"forbidden-msg"}`),
-	})
-
-	replayer := webhook.NewReplayer(dlq, webhook.NewDeliverer(webhook.Config{MaxAttempts: 1, TimeoutSecs: 5}))
-	err := replayer.Replay(context.Background(), "forbidden-msg", "")
-	if err == nil {
-		t.Fatal("expected error for 403 from rawPost")
-	}
-	if !strings.Contains(err.Error(), "403") {
-		t.Errorf("expected 403 in error message, got: %v", err)
 	}
 }
 

@@ -19,7 +19,7 @@ interface UptimeEvent {
 }
 
 // GET /status — JSON service health
-export async function handleStatusJSON(req: Request, env: Env): Promise<Response> {
+export async function handleStatusJSON(_req: Request, env: Env): Promise<Response> {
   const data = await buildStatusData(env);
   const allOp = Object.values(data.components).every(c => c.status === "operational");
   return jsonResponse(allOp ? 200 : 503, data);

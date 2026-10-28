@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
 linters:
@@ -10,6 +12,40 @@ linters:
     - noctx
     - revive
     - wrapcheck
+  settings:
+    wrapcheck:
+      # Deliberate pass-through errors. The first entries are wrapcheck's
+      # defaults (wrapping constructors); setting ignore-sigs replaces them.
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+        # ctx.Err() is returned as-is so callers can match context.Canceled
+        # and context.DeadlineExceeded without unwrapping noise.
+        - func (context.Context).Err() error
+        # net.Listener / net.Conn decorators must pass errors through
+        # unchanged: servers type-assert net.Error on Accept results.
+        - func (net.Listener).Accept() (net.Conn, error)
+        - func (net.Listener).Close() error
+        - func (net.Conn).Close() error
+  exclusions:
+    rules:
+      # Repeated literals and context-free requests are idiomatic in table
+      # tests and httptest fixtures; production code stays covered.
+      - path: _test\.go
+        linters:
+          - goconst
+          - noctx
+      # Doc-comment coverage is not gated by lint.
+      - linters:
+          - revive
+        text: "^(exported|package-comments): "
 formatters:
   enable:
     - gofumpt

@@ -38,7 +38,9 @@ func TestDLQ_AddAndList(t *testing.T) {
 func TestDLQ_Remove(t *testing.T) {
 	dlq := webhook.NewInMemoryDLQ()
 	entry := webhook.DLQEntry{MessageID: "msg-2", Payload: []byte("x")}
-	dlq.Add(context.Background(), entry)
+	if err := dlq.Add(context.Background(), entry); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 
 	if err := dlq.Remove(context.Background(), "msg-2"); err != nil {
 		t.Fatalf("Remove: %v", err)

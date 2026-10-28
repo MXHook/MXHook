@@ -23,7 +23,7 @@ func (l License) IsValid() bool {
 
 // Gate returns true if the feature is available under this license.
 // Use this for soft-gating: feature degrades gracefully when false.
-func (l License) Gate(feature string) bool {
+func (l License) Gate(_ string) bool {
 	return l.IsValid()
 }
 

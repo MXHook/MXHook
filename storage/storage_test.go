@@ -8,7 +8,7 @@ import (
 	"github.com/mxhook/mxhook/storage"
 )
 
-func TestFilesystemStorer_ImplementsStorer(t *testing.T) {
+func TestFilesystemStorer_ImplementsStorer(_ *testing.T) {
 	var _ storage.Storer = (*storage.FilesystemStorer)(nil)
 }
 

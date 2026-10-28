@@ -24,11 +24,14 @@ export async function handleDeliveries(
   if (!msg) return errorResponse(404, "Message not found");
 
   const result = await env.DB.prepare(
-    `SELECT id, message_id, webhook_url, status, attempt, response_status,
-            response_body, error, attempted_at, duration_ms
-     FROM delivery_attempts
-     WHERE message_id = ?
-     ORDER BY attempt ASC`,
+    // The table is delivery_logs; webhook_url lives on the route it targeted.
+    // No per-attempt duration or separate error text is stored.
+    `SELECT dl.id, dl.message_id, dl.route_id, r.webhook_url, dl.status,
+            dl.attempt, dl.http_status, dl.response_body, dl.delivered_at
+     FROM delivery_logs dl
+     LEFT JOIN routes r ON r.id = dl.route_id
+     WHERE dl.message_id = ?
+     ORDER BY dl.attempt ASC`,
   )
     .bind(messageId)
     .all();

@@ -18,7 +18,21 @@ export interface Env {
   LOG_LEVEL: string;
 }
 
-// EmailEvent is the payload published by fly.io SMTP edge nodes.
+export interface IngressMessageV1 {
+  schema_version: "mxhook.message.v1";
+  id: string;
+  trace_id: string;
+  received_at: string;
+  source: string;
+  source_id?: string;
+  envelope_from: string;
+  envelope_to: string[];
+  raw_sha256: string;
+  raw_size: number;
+  raw: string;
+}
+
+// EmailEvent is the parsed webhook payload produced from an ingress message.
 export interface EmailEvent {
   message_id: string;
   from:        string;
@@ -27,12 +41,12 @@ export interface EmailEvent {
   received_at: string;      // ISO-8601
   raw:         string;      // full RFC-5322 message
   tenant_id?:  string;      // resolved by worker after domain lookup
-  // abuse check fields
-  id?:         string;
-  senderIp?:   string;
-  body?:       string;
-  domain?:     string;
-  tenantId?:   string;
+  id:          string;
+  senderIp:    string;
+  body:        string;
+  domain:      string;
+  tenantId:    string;
+  receivedAt:  string;
 }
 
 // Route row from D1.

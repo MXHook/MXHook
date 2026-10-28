@@ -1,12 +1,32 @@
-# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
-includes:
-  - from_url:
-      url: charmbracelet/meta/main/goreleaser-lib.yaml
+
 builds:
   - id: mxhook
     main: .
     binary: mxhook
     env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: [-s -w]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+      - CHANGELOG.md
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

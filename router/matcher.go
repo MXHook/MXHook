@@ -23,8 +23,15 @@ func (m *Matcher) Match(recipient string) (Rule, bool) {
 	return Rule{}, false
 }
 
-// normalizeRecipient strips plus-addressing: task+label@domain.com → task@domain.com
+// normalizeRecipient lowercases the whole address and strips plus-addressing:
+// Task+label@Domain.com → task@domain.com.
+//
+// Folding the local part is a deliberate policy: RFC 5321 permits
+// case-sensitive local parts, but rule patterns are stored lowercased, so
+// matching folds the whole address to keep both sides consistent. The
+// original-case recipient is preserved upstream for delivery payloads.
 func normalizeRecipient(addr string) string {
+	addr = strings.ToLower(addr)
 	parts := strings.SplitN(addr, "@", 2)
 	if len(parts) != 2 {
 		return addr
@@ -37,6 +44,9 @@ func normalizeRecipient(addr string) string {
 }
 
 func matches(pattern, addr string) bool {
+	if pattern == "*" {
+		return true
+	}
 	if pattern == addr {
 		return true
 	}

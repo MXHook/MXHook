@@ -18,20 +18,34 @@ export async function handleMessages(req: Request, env: Env): Promise<Response> 
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 200);
   const cursor = url.searchParams.get("cursor") ?? null;
 
+  // messages stores the recipient list in to_addr and keys the domain by
+  // domain_id, so the name comes from a join. There is no status column: a
+  // message's delivery state is the latest delivery_logs row for it.
   let query = `
-    SELECT id, message_id, from_addr, to_addrs, subject, domain, status, received_at
-    FROM messages
-    WHERE tenant_id = ?
+    SELECT m.id, m.message_id, m.from_addr, m.to_addr, m.subject,
+           d.domain AS domain, m.received_at,
+           (SELECT dl.status FROM delivery_logs dl
+             WHERE dl.message_id = m.id
+             ORDER BY dl.attempt DESC LIMIT 1) AS status
+    FROM messages m
+    JOIN domains d ON d.id = m.domain_id
+    WHERE m.tenant_id = ?
   `;
   const params: unknown[] = [tenantId];
 
-  if (domain) { query += " AND domain = ?"; params.push(domain); }
-  if (status) { query += " AND status = ?"; params.push(status); }
-  if (since) { query += " AND received_at >= ?"; params.push(since); }
-  if (until) { query += " AND received_at <= ?"; params.push(until); }
-  if (cursor) { query += " AND id < ?"; params.push(cursor); }
+  if (domain) { query += " AND d.domain = ?"; params.push(domain); }
+  if (since) { query += " AND m.received_at >= ?"; params.push(since); }
+  if (until) { query += " AND m.received_at <= ?"; params.push(until); }
+  if (cursor) { query += " AND m.id < ?"; params.push(cursor); }
 
-  query += " ORDER BY received_at DESC LIMIT ?";
+  if (status) {
+    query += ` AND (SELECT dl.status FROM delivery_logs dl
+                     WHERE dl.message_id = m.id
+                     ORDER BY dl.attempt DESC LIMIT 1) = ?`;
+    params.push(status);
+  }
+
+  query += " ORDER BY m.received_at DESC LIMIT ?";
   params.push(limit + 1);
 
   const result = await env.DB.prepare(query).bind(...params).all();

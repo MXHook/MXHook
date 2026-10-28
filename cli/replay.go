@@ -2,7 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -27,9 +30,9 @@ func runReplay(cmd *cobra.Command, args []string) error {
 	apiKey, _ := cmd.Flags().GetString("api-key")
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, apiURL+"/replay/"+messageID, nil)
+	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, strings.TrimRight(apiURL, "/")+"/replay/"+url.PathEscape(messageID), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("replay: build request: %w", err)
 	}
 	if apiKey != "" {
 		req.Header.Set("X-API-Key", apiKey)
@@ -39,8 +42,11 @@ func runReplay(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("replay: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // response body fully consumed or abandoned; close error not actionable
+	if resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("replay: API returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Replay queued for message %s (status %d)\n", messageID, resp.StatusCode)
-	return nil
+	return printf(cmd, "Replay queued for message %s (status %d)\n", messageID, resp.StatusCode)
 }

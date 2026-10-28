@@ -13,7 +13,7 @@ export async function handleAdminUsage(req: Request, env: Env): Promise<Response
   const result = await env.DB.prepare(
     `SELECT t.id, t.name, t.email, t.plan,
             COUNT(m.id) AS message_count,
-            COUNT(DISTINCT m.domain) AS active_domains
+            COUNT(DISTINCT m.domain_id) AS active_domains
      FROM tenants t
      LEFT JOIN messages m ON m.tenant_id = t.id AND m.received_at >= ?
      GROUP BY t.id

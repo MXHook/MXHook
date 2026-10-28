@@ -1,7 +1,80 @@
 name: release
 on:
   push:
-    tags: ["v*.*.*"]
+    # Prereleases (-alpha.N, then -beta/-rc) are cut from next, the default
+    # branch. Stable releases are cut on main; that wiring lands with the
+    # first stable line.
+    branches:
+      - next
+
+permissions:
+  contents: read
+
 jobs:
+  # The release-bot App must be installed on the org with its secrets set.
+  # Until then this job reports "disabled" and release-please is skipped
+  # instead of failing every push.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          HAS_APP_ID: ${{ secrets.RELEASE_BOT_APP_ID != '' }}
+          HAS_APP_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_APP_ID" = "true" ] && [ "$HAS_APP_KEY" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::release-bot App secrets not set; skipping release-please"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release-please:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.enabled == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+    steps:
+      # Release-bot App token: tags it pushes trigger the tag workflows, unlike
+      # GITHUB_TOKEN, and no long-lived PAT exists.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+          target-branch: next
+          token: ${{ steps.app-token.outputs.token }}
+
   release:
-    uses: charmbracelet/meta/.github/workflows/goreleaser.yml@main
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      # GoReleaser uploads assets to the GitHub Release.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"os"
+
+	"github.com/mxhook/mxhook/cli"
+)
 
 func main() {
-	fmt.Println("mxhook")
+	if err := cli.Root.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

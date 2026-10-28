@@ -18,14 +18,15 @@ export async function handleBillingUsage(req: Request, env: Env): Promise<Respon
   const tenantId = sessionTenantId(session);
 
   const tenant = await env.DB.prepare(
-    "SELECT plan, billing_period_start FROM tenants WHERE id = ?",
+    "SELECT plan FROM tenants WHERE id = ?",
   )
     .bind(tenantId)
-    .first<{ plan: string; billing_period_start: string }>();
+    .first<{ plan: string }>();
 
   if (!tenant) return errorResponse(404, "Tenant not found");
 
-  const periodStart = tenant.billing_period_start ?? new Date(
+  // No per-tenant billing anchor is stored, so periods run on calendar months.
+  const periodStart = new Date(
     new Date().getFullYear(),
     new Date().getMonth(),
     1,

@@ -205,9 +205,9 @@
         <input id="f-domain" placeholder="Filter by domain" />
         <select id="f-status">
           <option value="">All statuses</option>
-          <option value="delivered">Delivered</option>
+          <option value="success">Delivered</option>
           <option value="failed">Failed</option>
-          <option value="queued">Queued</option>
+          <option value="retrying">Retrying</option>
         </select>
         <input id="f-since" type="date" />
         <button class="btn" onclick="loadMessages(null)">Apply</button>
@@ -233,8 +233,8 @@
         <table>
           <thead>
             <tr>
-              <th>Domain</th><th>Verified</th><th>SPF</th>
-              <th>DKIM</th><th>Routes</th><th>Added</th>
+              <th>Domain</th><th>Verified</th><th>TXT record</th>
+              <th>Routes</th><th>Added</th>
             </tr>
           </thead>
           <tbody id="domains-body"></tbody>
@@ -328,7 +328,9 @@
           return;
         }
         data.items.forEach(m => {
-          const statusMap = { delivered: 'ok', failed: 'err', queued: 'warn' };
+          // Status is the latest delivery attempt; null when none has run yet.
+          const statusMap = { success: 'ok', failed: 'err', retrying: 'warn' };
+          const status = m.status ?? 'pending';
           const tr = document.createElement('tr');
           const idStr = String(m.id ?? '').slice(0, 12) + '...';
           [
@@ -336,7 +338,7 @@
             el('td', null, [esc(m.from_addr)]),
             el('td', null, [esc(m.subject ?? '(no subject)')]),
             el('td', null, [esc(m.domain)]),
-            el('td', null, [badge(m.status, statusMap[m.status] ?? 'neutral')]),
+            el('td', null, [badge(status, statusMap[status] ?? 'neutral')]),
             el('td', null, [fmtDate(m.received_at)]),
           ].forEach(td => tr.appendChild(td));
           tbody.appendChild(tr);
@@ -359,28 +361,27 @@
 
     async function loadDomains() {
       const tbody = document.getElementById('domains-body');
-      setEmpty(tbody, 6, 'Loading...');
+      setEmpty(tbody, 5, 'Loading...');
       try {
         const data = await apiFetch('/domains');
         tbody.replaceChildren();
         if (!data.domains || !data.domains.length) {
-          setEmpty(tbody, 6, 'No domains configured');
+          setEmpty(tbody, 5, 'No domains configured');
           return;
         }
         data.domains.forEach(d => {
           const tr = document.createElement('tr');
           [
-            el('td', null, [esc(d.name)]),
+            el('td', null, [esc(d.domain)]),
             el('td', null, [badge(d.verified ? 'verified' : 'pending', d.verified ? 'ok' : 'warn')]),
-            el('td', null, [badge(d.spf_ok ? 'ok' : 'fail',  d.spf_ok ? 'ok' : 'err')]),
-            el('td', null, [badge(d.dkim_ok ? 'ok' : 'fail', d.dkim_ok ? 'ok' : 'err')]),
+            el('td', null, [esc(d.txt_record)]),
             el('td', null, [String(d.route_count ?? 0)]),
             el('td', null, [fmtDate(d.created_at)]),
           ].forEach(td => tr.appendChild(td));
           tbody.appendChild(tr);
         });
       } catch (e) {
-        setEmpty(tbody, 6, e.message || 'Error loading domains');
+        setEmpty(tbody, 5, e.message || 'Error loading domains');
       }
     }
 

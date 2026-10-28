@@ -1,0 +1,8 @@
+services:
+  mxhook:
+    environment:
+      MXHOOK_SMTP_ADDR: ""
+      MXHOOK_MAILDIR_PATH: /maildir
+      MXHOOK_MAILDIR_ID_NAMESPACE: "${MXHOOK_MAILDIR_ID_NAMESPACE:-docker-maildir}"
+    volumes:
+      - "${MAILDIR_PATH:?set MAILDIR_PATH to the host Maildir root}:/maildir:rw"

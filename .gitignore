@@ -1,0 +1,18 @@
+# Environment files are never committed, at any depth: .env, .env.docker,
+# .env.staging, .env.local, and anything else in the family. Only the
+# checked-in *.env.example templates are tracked.
+.env
+.env.*
+!.env.example
+!*.env.example
+data/
+*.db
+*.db-shm
+*.db-wal
+mxhook
+coverage.out
+
+# AGENTS.md is the tracked agent file and CLAUDE.md links to it; re-include
+# both over global ignores.
+!AGENTS.md
+!CLAUDE.md

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -17,6 +19,10 @@ var Root = &cobra.Command{
 func init() {
 	cobra.OnInitialize(initConfig)
 	Root.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: mxhook.yaml)")
+	viper.SetEnvPrefix("MXHOOK")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
+	viper.AllowEmptyEnv(true)
+	viper.AutomaticEnv()
 }
 
 func initConfig() {
@@ -27,7 +33,5 @@ func initConfig() {
 		viper.AddConfigPath(".")
 		viper.AddConfigPath("/etc/mxhook/")
 	}
-	viper.SetEnvPrefix("MXHOOK")
-	viper.AutomaticEnv()
 	_ = viper.ReadInConfig()
 }

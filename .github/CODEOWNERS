@@ -1,0 +1,9 @@
+# Guardrail-minimal: ONLY release-managed paths, no `*` fallback, so ordinary
+# PRs never wait on code-owner review. Pair with a default-branch ruleset:
+# 0 required approvals + require_code_owner_review.
+# Owner is @jadb until an MXHook release team exists.
+/.github/release-please-config.json     @jadb
+/.github/.release-please-manifest.json  @jadb
+/.github/workflows/release.yml          @jadb
+/.goreleaser.yaml                       @jadb
+/CHANGELOG.md                           @jadb

@@ -4,6 +4,13 @@ compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------------------------------------------------------------------------
+# Queue producer — admin health probe publishes to this binding
+# ---------------------------------------------------------------------------
+[[queues.producers]]
+  binding = "EMAIL_QUEUE"
+  queue   = "mxhook-email-events"
+
+# ---------------------------------------------------------------------------
 # Queue consumer
 # ---------------------------------------------------------------------------
 [[queues.consumers]]
