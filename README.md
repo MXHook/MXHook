@@ -9,9 +9,6 @@ Self-hosted inbound email processing: SMTP or Maildir in, signed JSON webhooks o
 [![Go](https://img.shields.io/github/go-mod/go-version/MXHook/MXHook)](go.mod)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 
-> [!WARNING]
-> 🚧 Do Not Use — History Will Be Rewritten 🚧
-
 ## What this is, and is not
 
 MXHook accepts SMTP or Maildir messages, persists the raw message, parses and
@@ -163,6 +160,4 @@ Changes follow [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## License
 
-GNU Affero General Public License v3.0 only (`AGPL-3.0-only`) — see
-[LICENSE](LICENSE) and [NOTICE](NOTICE). The `ee/` directory is licensed
-separately under the Business Source License 1.1 — see [ee/LICENSE](ee/LICENSE).
+[AGPLv3](LICENSE)
