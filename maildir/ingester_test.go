@@ -60,11 +60,19 @@ func newTestMaildir(t *testing.T) string {
 	return root
 }
 
+// writeMessage delivers like a Maildir MTA: write the whole file under tmp/,
+// then rename it into dir. Writing straight into new/ lets a running
+// ingester claim the file before its contents land and read a partial
+// message.
 func writeMessage(t *testing.T, root, dir, name, body string) string {
 	t.Helper()
+	staged := filepath.Join(root, "tmp", "delivery-"+name)
+	if err := os.WriteFile(staged, []byte(body), 0o600); err != nil {
+		t.Fatalf("stage message: %v", err)
+	}
 	path := filepath.Join(root, dir, name)
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write message: %v", err)
+	if err := os.Rename(staged, path); err != nil {
+		t.Fatalf("deliver message: %v", err)
 	}
 	return path
 }
@@ -355,12 +363,14 @@ func TestRunPollsForNewMessages(t *testing.T) {
 	go func() { done <- ingester.Run(ctx) }()
 
 	writeMessage(t, root, "new", "arrived-later", testMessage)
-	deadline := time.Now().Add(2 * time.Second)
+	// Wait on the condition, not a fixed duration: the deadline only bounds
+	// a genuine hang on a slow runner.
+	deadline := time.Now().Add(10 * time.Second)
 	for len(q.snapshot()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(q.snapshot()) != 1 {
-		t.Fatal("Run did not poll newly delivered message")
+	if got := len(q.snapshot()); got != 1 {
+		t.Fatalf("Run enqueued %d messages after delivery, want 1", got)
 	}
 	cancel()
 	select {

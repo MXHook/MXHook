@@ -59,10 +59,14 @@ make worker-deps
 ```
 
 `mise trust` is required — mise refuses to run an untrusted config file.
-`mise.toml` also exports `TEST_DATABASE_URL` pointing at
-`localhost:5432`; start a matching database with
-`docker compose --profile postgres up -d postgres` before running the
-Postgres-gated tests.
+Postgres-gated tests skip unless `TEST_DATABASE_URL` is set; `make test` and
+`make race` never need a database. To run them, start one with
+`docker compose --profile postgres up -d postgres`, then:
+
+```bash
+make test-postgres \
+  TEST_DATABASE_URL='postgres://mxhook:mxhook@localhost:5432/mxhook?sslmode=disable'
+```
 
 Verify the setup:
 

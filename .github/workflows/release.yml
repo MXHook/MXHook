@@ -6,8 +6,6 @@ on:
     # first stable line.
     branches:
       - next
-  # TEMP (CI preview only, not part of the reset): exercise the preflight on a PR.
-  pull_request:
 
 permissions:
   contents: read
