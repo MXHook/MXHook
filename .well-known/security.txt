@@ -1,0 +1,10 @@
+Contact: mailto:security@mxhook.dev
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://mxhook.dev/.well-known/security.txt
+Policy: https://mxhook.dev/security-policy
+Acknowledgments: https://mxhook.dev/security-acknowledgments
+
+# Report security vulnerabilities to: security@mxhook.dev
+# Response time target: 72 hours
+# We do not have a bug bounty program at this time.

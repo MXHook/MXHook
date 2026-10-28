@@ -1,0 +1,58 @@
+groups:
+  - name: mxhook
+    rules:
+      - alert: MXHookUnavailable
+        expr: up{job="mxhook"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: MXHook metrics endpoint unavailable
+          description: Prometheus has not scraped MXHook successfully for five minutes.
+
+      - alert: MXHookMetricsSnapshotUnavailable
+        expr: mxhook_metrics_snapshot_healthy == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: MXHook cannot read durable backlog state
+          description: Readiness and database/storage dependencies need investigation.
+
+      - alert: MXHookQueueBacklog
+        # Depth is a gauge and carries no per-message age: a busy, healthy
+        # instance legitimately holds nonzero depth. Alert on sustained depth
+        # above a threshold and tune it to expected traffic.
+        expr: min_over_time(mxhook_queue_depth[10m]) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: MXHook ingress queue backlog is sustained
+          description: Ingress queue depth has stayed above 100 for ten minutes. Depth cannot show message age; check worker health and throughput, and tune the threshold to expected traffic.
+
+      - alert: MXHookOutboxBacklog
+        expr: mxhook_outbox_depth > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: MXHook webhook outbox is not draining
+          description: At least one webhook delivery has remained pending for fifteen minutes.
+
+      - alert: MXHookDeadDeliveries
+        expr: mxhook_dead_depth > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: MXHook has terminal delivery failures
+          description: Inspect the authenticated DLQ and fix the receiver before replaying. This alert keeps firing until dead deliveries are replayed or purged; silence it during remediation rather than raising the threshold.
+
+      - alert: MXHookWebhookFailures
+        expr: sum without (outcome) (increase(mxhook_webhook_deliveries_total{outcome=~"retry|dead"}[10m])) >= 5
+        labels:
+          severity: warning
+        annotations:
+          summary: MXHook webhook delivery attempts are failing
+          description: Five or more webhook delivery attempts were retried or marked dead during the last ten minutes.

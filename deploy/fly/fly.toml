@@ -1,0 +1,29 @@
+app = "mxhook-smtp-edge"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../../Dockerfile"
+
+[env]
+  SMTP_ADDR       = ":25"
+  SMTP_DOMAIN     = "mx.mxhook.dev"
+  LOG_LEVEL       = "info"
+
+[[services]]
+  protocol    = "tcp"
+  internal_port = 25
+  auto_stop_machines  = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 25
+    handlers = ["tls"]
+
+  [services.concurrency]
+    type       = "connections"
+    hard_limit = 500
+    soft_limit = 400
+
+[metrics]
+  port = 9091
+  path = "/metrics"

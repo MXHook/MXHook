@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MXHook Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=ibm-plex-mono:400,500|ibm-plex-sans:400,500,600" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #090b0f; --surface: #111318; --border: #1e2128;
+      --accent: #ff6b35; --ok: #00e5a0; --text: #e8eaf0; --muted: #5a6070;
+      --danger: #ff4d4d; --warn: #f59e0b; --accent2: #a78bfa;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --radius: 5px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 14px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px; border-bottom: 1px solid var(--border); background: var(--surface);
+    }
+    .logo { font-family: var(--font-mono); font-size: 16px; font-weight: 500; color: var(--accent); }
+    .logo span { color: var(--text); }
+    .admin-tag {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      background: rgba(255,107,53,0.15); color: var(--accent);
+      padding: 2px 8px; border-radius: 3px; font-family: var(--font-mono);
+      margin-left: 10px;
+    }
+    .key-form { display: flex; gap: 8px; align-items: center; }
+    .key-form input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      color: var(--text); font: 13px var(--font-mono); padding: 6px 12px; width: 280px;
+    }
+    .btn {
+      background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+      padding: 7px 14px; font: 500 13px var(--font-sans); cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-sm { font-size: 12px; padding: 4px 10px; }
+    .btn-ghost {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+    }
+    .btn-ghost:hover { color: var(--text); background: var(--border); }
+    nav { display: flex; gap: 4px; padding: 16px 28px 0; border-bottom: 1px solid var(--border); }
+    nav button {
+      background: none; border: none; color: var(--muted); font: 500 13px var(--font-sans);
+      padding: 8px 16px; border-radius: var(--radius) var(--radius) 0 0;
+      cursor: pointer; transition: all 0.15s; border-bottom: 2px solid transparent;
+    }
+    nav button:hover { color: var(--text); }
+    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    main { padding: 28px; max-width: 1200px; margin: 0 auto; }
+    .tab { display: none; }
+    .tab.active { display: block; animation: fadeIn 0.15s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    h2 { font-size: 18px; font-weight: 600; margin-bottom: 18px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); padding: 0 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 12px; border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono); font-size: 12px; vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.015); }
+    .badge {
+      display: inline-block; padding: 2px 7px; border-radius: 3px;
+      font-size: 10px; font-weight: 500; font-family: var(--font-mono);
+    }
+    .badge-ok      { background: rgba(0,229,160,0.1); color: var(--ok); }
+    .badge-warn    { background: rgba(245,158,11,0.1); color: var(--warn); }
+    .badge-err     { background: rgba(255,77,77,0.1);  color: var(--danger); }
+    .badge-neutral { background: var(--border); color: var(--muted); }
+    .badge-purple  { background: rgba(167,139,250,0.1); color: var(--accent2); }
+    .health-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px; margin-bottom: 20px;
+    }
+    .health-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px; position: relative;
+      overflow: hidden;
+    }
+    .health-card.ok    { border-left: 3px solid var(--ok); }
+    .health-card.down  { border-left: 3px solid var(--danger); }
+    .health-card.unkn  { border-left: 3px solid var(--border); }
+    .health-name { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+    .health-status { font-size: 22px; font-weight: 600; font-family: var(--font-mono); margin: 6px 0 4px; }
+    .health-status.ok   { color: var(--ok); }
+    .health-status.down { color: var(--danger); }
+    .health-latency { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+    .empty { text-align: center; color: var(--muted); padding: 36px; font-family: var(--font-mono); font-size: 12px; }
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; width: 400px; max-width: 90vw;
+    }
+    .modal h3 { font-size: 16px; margin-bottom: 16px; }
+    .modal pre {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 12px; font-family: var(--font-mono); font-size: 11px;
+      color: var(--ok); overflow: auto; max-height: 200px; word-break: break-all;
+      white-space: pre-wrap;
+    }
+    .modal-close { margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;align-items:center;">
+      <div class="logo">mx<span>hook</span></div>
+      <span class="admin-tag">admin</span>
+    </div>
+    <div class="key-form">
+      <input id="admin-key" type="password" placeholder="Admin API key" autocomplete="off" />
+      <button class="btn btn-sm" onclick="saveKey()">Set Key</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" onclick="showTab('tenants', this)">Tenants</button>
+    <button onclick="showTab('usage', this)">Usage</button>
+    <button onclick="showTab('health', this)">Health</button>
+  </nav>
+
+  <main>
+    <!-- Tenants -->
+    <div id="tab-tenants" class="tab active">
+      <h2>Tenants</h2>
+      <div class="card" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Name</th><th>Email</th><th>Plan</th>
+              <th>Status</th><th>Domains</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tenants-body"></tbody>
+        </table>
+      </div>
+      <div id="tenants-pagination" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- Usage -->
+    <div id="tab-usage" class="tab">
+      <h2>Top Tenants by Volume (this month)</h2>
+      <div class="card" style="padding:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th><th>Tenant</th><th>Plan</th>
+              <th>Messages</th><th>Active Domains</th>
+            </tr>
+          </thead>
+          <tbody id="usage-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Health -->
+    <div id="tab-health" class="tab">
+      <h2>System Health</h2>
+      <div id="health-grid" class="health-grid"></div>
+      <button class="btn btn-ghost" onclick="loadHealth()">Refresh</button>
+    </div>
+  </main>
+
+  <!-- Impersonate modal -->
+  <div id="impersonate-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Impersonation Token</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+        Valid 30 minutes. Use as Bearer token for customer dashboard API.
+      </p>
+      <pre id="impersonate-token"></pre>
+      <div class="modal-close">
+        <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminKey = '';
+
+    function saveKey() {
+      adminKey = document.getElementById('admin-key').value.trim();
+      loadTenants(null);
+    }
+
+    function headers() {
+      return { 'X-Admin-Key': adminKey };
+    }
+
+    async function adminFetch(path, opts) {
+      const res = await fetch('/admin' + path, { ...opts, headers: { ...headers(), ...(opts && opts.headers || {}) } });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || res.statusText);
+      }
+      return res.json();
+    }
+
+    function showTab(name, btn) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      btn.classList.add('active');
+      if (name === 'tenants') loadTenants(null);
+      if (name === 'usage')   loadUsage();
+      if (name === 'health')  loadHealth();
+    }
+
+    function setEmpty(tbody, cols, msg) {
+      tbody.replaceChildren();
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = cols;
+      td.className = 'empty';
+      td.textContent = msg;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+
+    function badge(label, type) {
+      const s = document.createElement('span');
+      s.className = 'badge badge-' + type;
+      s.textContent = label;
+      return s;
+    }
+
+    function planBadge(plan) {
+      const map = { free: 'neutral', starter: 'ok', pro: 'purple', enterprise: 'warn' };
+      return badge(plan, map[plan] || 'neutral');
+    }
+
+    function statusBadge(s) {
+      const m = { active: 'ok', suspended: 'warn', cancelled: 'err' };
+      return badge(s, m[s] || 'neutral');
+    }
+
+    async function loadTenants(cursor) {
+      const tbody = document.getElementById('tenants-body');
+      setEmpty(tbody, 7, 'Loading...');
+      try {
+        const params = new URLSearchParams({ limit: '50' });
+        if (cursor) params.set('cursor', cursor);
+        const data = await adminFetch('/tenants?' + params);
+        tbody.replaceChildren();
+        if (!data.items.length) { setEmpty(tbody, 7, 'No tenants'); return; }
+        data.items.forEach(t => {
+          const tr = document.createElement('tr');
+          const idTd = document.createElement('td');
+          idTd.title = t.id;
+          idTd.textContent = String(t.id).slice(0, 10) + '...';
+          const impBtn = document.createElement('button');
+          impBtn.className = 'btn btn-sm btn-ghost';
+          impBtn.textContent = 'Impersonate';
+          impBtn.addEventListener('click', () => impersonate(t.id));
+          const actionsTd = document.createElement('td');
+          actionsTd.appendChild(impBtn);
+          [
+            idTd,
+            makeTd(t.name),
+            makeTd(t.email),
+            makeBadgeTd(planBadge(t.plan)),
+            makeBadgeTd(statusBadge(t.status)),
+            makeTd(String(t.domain_count ?? 0)),
+            actionsTd,
+          ].forEach(td => tr.appendChild(td));
+          tbody.appendChild(tr);
+        });
+
+        const pag = document.getElementById('tenants-pagination');
+        pag.replaceChildren();
+        if (data.next_cursor) {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-ghost';
+          btn.textContent = 'Load more';
+          const nc = data.next_cursor;
+          btn.addEventListener('click', () => loadTenants(nc));
+          pag.appendChild(btn);
+        }
+      } catch (e) {
+        setEmpty(tbody, 7, e.message || 'Error');
+      }
+    }
+
+    async function loadUsage() {
+      const tbody = document.getElementById('usage-body');
+      setEmpty(tbody, 5, 'Loading...');
+      try {
+        const data = await adminFetch('/usage');
+        tbody.replaceChildren();
+        if (!data.top_tenants.length) { setEmpty(tbody, 5, 'No data'); return; }
+        data.top_tenants.forEach((t, i) => {
+          const tr = document.createElement('tr');
+          [
+            makeTd('#' + (i + 1)),
+            makeTd(t.name + ' (' + t.email + ')'),
+            makeBadgeTd(planBadge(t.plan)),
+            makeTd(Number(t.message_count).toLocaleString()),
+            makeTd(String(t.active_domains ?? 0)),
+          ].forEach(td => tr.appendChild(td));
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        setEmpty(tbody, 5, e.message || 'Error');
+      }
+    }
+
+    async function loadHealth() {
+      const grid = document.getElementById('health-grid');
+      grid.replaceChildren();
+      const loading = document.createElement('p');
+      loading.textContent = 'Checking components...';
+      loading.style.color = 'var(--muted)';
+      grid.appendChild(loading);
+      try {
+        const data = await adminFetch('/health');
+        grid.replaceChildren();
+        Object.entries(data.components).forEach(([name, c]) => {
+          const card = document.createElement('div');
+          card.className = 'health-card ' + (c.status === 'ok' ? 'ok' : 'down');
+          const namEl = document.createElement('div');
+          namEl.className = 'health-name';
+          namEl.textContent = name.toUpperCase();
+          const statEl = document.createElement('div');
+          statEl.className = 'health-status ' + (c.status === 'ok' ? 'ok' : 'down');
+          statEl.textContent = c.status;
+          const latEl = document.createElement('div');
+          latEl.className = 'health-latency';
+          latEl.textContent = c.latency_ms != null ? c.latency_ms + 'ms' : '';
+          card.appendChild(namEl);
+          card.appendChild(statEl);
+          card.appendChild(latEl);
+          if (c.error) {
+            const errEl = document.createElement('div');
+            errEl.style.cssText = 'font-size:11px;color:var(--danger);margin-top:6px;font-family:var(--font-mono);';
+            errEl.textContent = c.error;
+            card.appendChild(errEl);
+          }
+          grid.appendChild(card);
+        });
+      } catch (e) {
+        grid.replaceChildren();
+        const p = document.createElement('p');
+        p.style.color = 'var(--danger)';
+        p.textContent = e.message || 'Error';
+        grid.appendChild(p);
+      }
+    }
+
+    async function impersonate(tenantId) {
+      try {
+        const data = await adminFetch('/tenants/' + tenantId + '/impersonate', { method: 'POST' });
+        document.getElementById('impersonate-token').textContent = data.token;
+        document.getElementById('impersonate-modal').classList.add('open');
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('impersonate-modal').classList.remove('open');
+      document.getElementById('impersonate-token').textContent = '';
+    }
+
+    function makeTd(text) {
+      const td = document.createElement('td');
+      td.textContent = String(text ?? '');
+      return td;
+    }
+
+    function makeBadgeTd(badgeEl) {
+      const td = document.createElement('td');
+      td.appendChild(badgeEl);
+      return td;
+    }
+
+    // Initial load
+    loadTenants(null);
+  </script>
+</body>
+</html>

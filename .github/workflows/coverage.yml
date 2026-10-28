@@ -1,0 +1,52 @@
+name: coverage
+
+on:
+  pull_request:
+  push:
+    # next: default prerelease line; main: stable line.
+    branches: [next, main]
+
+permissions:
+  contents: read
+
+env:
+  MISE_EXEC_AUTO_INSTALL: "false"
+  MISE_NOT_FOUND_AUTO_INSTALL: "false"
+  # The checked-out repo is the only mise config in play; trust it explicitly.
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    # Mirror the build job's Postgres service so state-store integration
+    # tests run here too; without it their coverage is silently dropped.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mxhook
+          POSTGRES_PASSWORD: mxhook
+          POSTGRES_DB: mxhook
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mxhook"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://mxhook:mxhook@127.0.0.1:5432/mxhook?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install_args: go
+      - run: mise exec -- make coverage
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 14

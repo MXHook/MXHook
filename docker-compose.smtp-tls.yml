@@ -1,0 +1,12 @@
+services:
+  mxhook:
+    environment:
+      MXHOOK_SMTP_ADDR: ":2525"
+      MXHOOK_SMTP_TLS_CERT: /run/mxhook-tls/certificate.pem
+      MXHOOK_SMTP_TLS_KEY: /run/mxhook-tls/private-key.pem
+      MXHOOK_SMTP_REQUIRE_TLS: "true"
+    ports:
+      - "${MXHOOK_SMTP_BIND:-0.0.0.0}:${MXHOOK_SMTP_PORT:-25}:2525"
+    volumes:
+      - "${MXHOOK_SMTP_CERT_FILE:?set MXHOOK_SMTP_CERT_FILE}:/run/mxhook-tls/certificate.pem:ro"
+      - "${MXHOOK_SMTP_KEY_FILE:?set MXHOOK_SMTP_KEY_FILE}:/run/mxhook-tls/private-key.pem:ro"

@@ -1,0 +1,29 @@
+# Devcontainer overlay. Composed with the repository docker-compose.yml so the
+# existing postgres service is reused rather than duplicated — that service is
+# what makes TEST_DATABASE_URL-gated integration tests runnable.
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/base:debian-12
+    command: sleep infinity
+    volumes:
+      - ..:/workspace:cached
+    working_dir: /workspace
+    environment:
+      # postgres resolves over the compose network; the service sets these
+      # credentials and database name.
+      TEST_DATABASE_URL: "postgres://mxhook:mxhook@postgres:5432/mxhook?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # The repository compose file's ${VAR:?} guards are resolved when compose
+  # parses the file, so they cannot be satisfied by a service-level override
+  # here — .devcontainer/.env supplies placeholders instead. The mxhook
+  # production service is excluded from runServices and never starts.
+
+  # postgres keeps the base file's "postgres" profile — compose merges profile
+  # lists rather than replacing them, so it cannot be cleared from here.
+  # devcontainer.json activates it via COMPOSE_PROFILES in .devcontainer/.env.
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"

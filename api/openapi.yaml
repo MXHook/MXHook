@@ -1,0 +1,449 @@
+openapi: "3.1.0"
+info:
+  title: MXHook API
+  description: Inbound email processing platform — manage domains, routes, messages, and webhooks.
+  version: "1.0.0"
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+
+servers:
+  - url: http://localhost:8080
+    description: Local or SSH-forwarded self-hosted API
+
+security:
+  - apiKey: []
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Domain:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required: [id, name, created_at]
+
+    Route:
+      type: object
+      properties:
+        id:
+          type: string
+        domain:
+          type: string
+        recipient_pattern:
+          type: string
+          description: "Exact address, wildcard (*@domain.com), or plus-stripped (base@domain.com)"
+        webhook_url:
+          type: string
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+      required: [id, domain, recipient_pattern, webhook_url, created_at]
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        message_id:
+          type: string
+        from:
+          type: string
+        to:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum: [processed]
+      required: [id, from, to, subject, received_at, state]
+
+    DLQEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        message_id:
+          type: string
+        route_id:
+          type: string
+        webhook_url:
+          type: string
+        failed_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        attempt_count:
+          type: integer
+        replay_generation:
+          type: integer
+      required: [id, message_id, failed_at, reason]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      security: []
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /healthz:
+    get:
+      summary: Process liveness
+      security: []
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Process alive
+
+  /readyz:
+    get:
+      summary: Database and schema readiness
+      security: []
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Ready to serve
+        "503":
+          description: Dependency unavailable
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      security: []
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Prometheus text exposition
+
+  /openapi.yaml:
+    get:
+      summary: OpenAPI spec
+      security: []
+      operationId: getOpenAPISpec
+      responses:
+        "200":
+          description: OpenAPI 3.1 spec
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /domains:
+    get:
+      summary: List domains
+      operationId: listDomains
+      responses:
+        "200":
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Domain"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Register a domain
+      operationId: createDomain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required: [name]
+      responses:
+        "201":
+          description: Domain created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /domains/{id}:
+    delete:
+      summary: Delete a domain
+      operationId: deleteDomain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Domain deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /routes:
+    get:
+      summary: List routes
+      operationId: listRoutes
+      responses:
+        "200":
+          description: List of routes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Route"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Create a routing rule
+      operationId: createRoute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                domain:
+                  type: string
+                recipient_pattern:
+                  type: string
+                webhook_url:
+                  type: string
+                  format: uri
+                webhook_secret:
+                  type: string
+                  description: >-
+                    Required when the server is backed by a durable
+                    repository; optional for the in-memory store.
+              required: [webhook_url]
+      responses:
+        "201":
+          description: Route created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Route"
+        "400":
+          description: Invalid request body, or webhook_secret/endpoint validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /routes/{id}:
+    delete:
+      summary: Delete a route
+      operationId: deleteRoute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Route deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /messages:
+    get:
+      summary: List messages
+      operationId: listMessages
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /messages/{id}:
+    get:
+      summary: Get a message by ID
+      operationId: getMessage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Message detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /replay/{id}:
+    post:
+      summary: Re-deliver a message by ID
+      operationId: replayMessage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Replay queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  deliveries:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /dlq:
+    get:
+      summary: List dead-letter queue entries
+      operationId: listDLQ
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        "200":
+          description: DLQ entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DLQEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /dlq/{id}:
+    delete:
+      summary: Delete a dead-letter queue entry
+      operationId: deleteDLQEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: DLQ entry deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          description: >-
+            Repository mode retains dead deliveries; schedule a replay
+            instead of deleting.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: DLQ not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

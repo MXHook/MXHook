@@ -1,0 +1,17 @@
+MXHook
+
+Copyright (c) 2026 Idea Crafters LLC <open@ideacrafters.com>
+Copyright (c) 2026 Jad Bitar <https://github.com/jadb>
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License, version 3 only
+(SPDX-License-Identifier: AGPL-3.0-only), as published by the Free Software
+Foundation. See LICENSE for the full text.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
+
+The contents of the ee/ directory are licensed separately under the Business
+Source License 1.1. See ee/LICENSE.

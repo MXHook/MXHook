@@ -1,0 +1,104 @@
+name: build
+
+on:
+  push:
+    # next: default prerelease line; main: stable line.
+    branches: [next, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Tools come from mise.toml; jobs install only what they use and never
+  # auto-install the rest on `mise exec`.
+  MISE_EXEC_AUTO_INSTALL: "false"
+  MISE_NOT_FOUND_AUTO_INSTALL: "false"
+  # The checked-out repo is the only mise config in play; trust it explicitly.
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+jobs:
+  go:
+    # Windows is unsupported: Maildir ingestion is POSIX-only.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install_args: go
+      - run: mise exec -- make compile vet test race build
+
+  postgres:
+    # Service containers run on Linux runners only.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mxhook
+          POSTGRES_PASSWORD: mxhook
+          POSTGRES_DB: mxhook
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mxhook"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://mxhook:mxhook@127.0.0.1:5432/mxhook?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install_args: go
+      - run: mise exec -- make test-postgres
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate Compose configurations
+        env:
+          MXHOOK_WEBHOOK_URL: https://example.com/mxhook
+          MXHOOK_WEBHOOK_SECRET: test-webhook-secret
+          MXHOOK_STATE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          MXHOOK_API_KEY: test-api-key
+          MXHOOK_SMTP_ALLOWED_DOMAINS: example.com
+          POSTGRES_PASSWORD: test-postgres-password
+          MAILDIR_PATH: /tmp/Maildir
+          MXHOOK_SMTP_CERT_FILE: /tmp/certificate.pem
+          MXHOOK_SMTP_KEY_FILE: /tmp/private-key.pem
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.maildir.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.smtp-tls.yml config --quiet
+      - run: make docker
+
+  worker-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install_args: node
+      - run: mise exec -- make worker-deps worker-check worker-dry-run NPM_CI_FLAGS=--ignore-scripts
+      # Advisory only: new upstream advisories must not fail unrelated PRs.
+      - run: mise exec -- npm --prefix worker audit --audit-level=high
+        continue-on-error: true

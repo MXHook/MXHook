@@ -1,0 +1,60 @@
+services:
+  mxhook:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    init: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    environment:
+      MXHOOK_RUNTIME_ROLE: "all"
+      MXHOOK_QUEUE_BACKEND: "${MXHOOK_QUEUE_BACKEND:-sqlite}"
+      MXHOOK_DATABASE_URL: "${MXHOOK_DATABASE_URL:-/data/mxhook.db}"
+      MXHOOK_SMTP_ADDR: "${MXHOOK_SMTP_ADDR-:2525}"
+      MXHOOK_SMTP_DOMAIN: "${MXHOOK_SMTP_DOMAIN:-localhost}"
+      MXHOOK_SMTP_ALLOWED_DOMAINS: "${MXHOOK_SMTP_ALLOWED_DOMAINS-}"
+      MXHOOK_STORAGE_RAW_DIR: /data/raw
+      MXHOOK_WEBHOOK_URL: "${MXHOOK_WEBHOOK_URL:?set MXHOOK_WEBHOOK_URL}"
+      MXHOOK_WEBHOOK_SECRET: "${MXHOOK_WEBHOOK_SECRET:?set MXHOOK_WEBHOOK_SECRET}"
+      MXHOOK_STATE_ENCRYPTION_KEY: "${MXHOOK_STATE_ENCRYPTION_KEY:?set MXHOOK_STATE_ENCRYPTION_KEY}"
+      MXHOOK_API_ADDR: "0.0.0.0:8080"
+      MXHOOK_API_KEY: "${MXHOOK_API_KEY:?set MXHOOK_API_KEY}"
+      MXHOOK_RUNTIME_SHUTDOWN_GRACE_PERIOD: "${MXHOOK_SHUTDOWN_GRACE_PERIOD:-30s}"
+    ports:
+      - "127.0.0.1:${MXHOOK_API_PORT:-8080}:8080"
+      # SMTP listens on :2525 inside the container but is intentionally not
+      # published: the quickstart feeds ingress from same-network containers
+      # or the Maildir/STARTTLS overlays. Uncomment to accept host SMTP:
+      # - "127.0.0.1:${MXHOOK_SMTP_PORT:-2525}:2525"
+    volumes:
+      - mxhook_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mxhook
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for the postgres profile}"
+      POSTGRES_DB: mxhook
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mxhook"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mxhook_data:
+  postgres_data:
